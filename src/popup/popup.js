@@ -293,6 +293,139 @@ function renderRecordingState(recording) {
   }
 }
 
+function formatBytes(bytes = 0) {
+  const value = Number(bytes || 0);
+
+  if (value < 1024) {
+    return `${value} B`;
+  }
+
+  if (value < 1024 * 1024) {
+    return `${(value / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatRecoveryDate(timestamp) {
+  try {
+    return new Date(timestamp).toLocaleString();
+  } catch {
+    return "";
+  }
+}
+
+async function listRecoverableSessions() {
+  const response = await chrome.runtime.sendMessage({
+    type: "TABVAULT_LIST_RECOVERABLE"
+  });
+
+  if (!response?.ok) {
+    throw new Error(response?.error || "Unable to inspect recoverable recordings.");
+  }
+
+  return response.sessions || [];
+}
+
+async function refreshRecoveryPanel() {
+  const card = document.getElementById("recoveryCard");
+  const list = document.getElementById("recoveryList");
+  const sessions = await listRecoverableSessions();
+
+  list.textContent = "";
+  card.classList.toggle("hidden", sessions.length === 0);
+
+  for (const session of sessions) {
+    const item = document.createElement("div");
+    item.className = "recovery-item";
+
+    const title = document.createElement("strong");
+    title.textContent = session.title || "Interrupted recording";
+
+    const meta = document.createElement("div");
+    meta.className = "footnote";
+    meta.textContent = [
+      formatRecoveryDate(session.startedAt),
+      `${Number(session.chunkCount || 0)} chunks`,
+      formatBytes(session.bytesPersisted)
+    ].filter(Boolean).join(" · ");
+
+    const actions = document.createElement("div");
+    actions.className = "recovery-actions";
+
+    const recoverButton = document.createElement("button");
+    recoverButton.type = "button";
+    recoverButton.className = "secondary";
+    recoverButton.textContent = "Recover";
+
+    const discardButton = document.createElement("button");
+    discardButton.type = "button";
+    discardButton.className = "secondary";
+    discardButton.textContent = "Discard";
+
+    recoverButton.addEventListener("click", async () => {
+      setError("");
+      recoverButton.disabled = true;
+      discardButton.disabled = true;
+
+      try {
+        const response = await chrome.runtime.sendMessage({
+          type: "TABVAULT_RECOVER_SESSION",
+          sessionId: session.sessionId
+        });
+
+        if (!response?.ok) {
+          throw new Error(response?.error || "Unable to recover recording.");
+        }
+
+        setError(`Recovered ${response.recording?.filename || "recording"}`);
+        await refreshRecoveryPanel();
+      } catch (error) {
+        setError(error.message);
+      } finally {
+        recoverButton.disabled = false;
+        discardButton.disabled = false;
+      }
+    });
+
+    discardButton.addEventListener("click", async () => {
+      const confirmed = window.confirm(
+        "Discard this recoverable recording? This permanently removes its saved chunks."
+      );
+
+      if (!confirmed) {
+        return;
+      }
+
+      setError("");
+      recoverButton.disabled = true;
+      discardButton.disabled = true;
+
+      try {
+        const response = await chrome.runtime.sendMessage({
+          type: "TABVAULT_DISCARD_RECOVERY",
+          sessionId: session.sessionId
+        });
+
+        if (!response?.ok) {
+          throw new Error(response?.error || "Unable to discard recording.");
+        }
+
+        await refreshRecoveryPanel();
+      } catch (error) {
+        setError(error.message);
+      } finally {
+        recoverButton.disabled = false;
+        discardButton.disabled = false;
+      }
+    });
+
+    actions.append(recoverButton, discardButton);
+    item.append(title, meta, actions);
+    list.append(item);
+  }
+}
+
 async function getState() {
   const response = await chrome.runtime.sendMessage({
     type: "TABVAULT_GET_STATE"
@@ -410,6 +543,12 @@ async function init() {
 
   const state = await getState();
   renderRecordingState(state.recording);
+
+  try {
+    await refreshRecoveryPanel();
+  } catch (error) {
+    setError(error.message);
+  }
 
   if (activeSource.type === "teams") {
     try {
