@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "TabVault",
+  "version": "0.1.0",
+  "description": "Local-first browser tab recording for SharePoint, Teams, and generic tabs.",
+  "permissions": [
+    "activeTab",
+    "storage"
+  ],
+  "action": {
+    "default_title": "TabVault",
+    "default_popup": "src/popup/popup.html"
+  },
+  "background": {
+    "service_worker": "src/background/service-worker.js",
+    "type": "module"
+  }
+}
