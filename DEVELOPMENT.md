@@ -84,7 +84,7 @@ Evidence:
 - DEV-002 complete.
 
 ### DEV-003 — Audio capture
-**Status:** Implemented — browser runtime verification pending
+**Status:** Complete
 
 Acceptance criteria:
 - Capture tab audio together with video when available.
@@ -100,10 +100,11 @@ Evidence:
 - Local audio passthrough is restored with Web Audio while capture is active so ordinary playback remains audible; companion-mode suppression can be added later under DEV-009.
 - User runtime verification on 2026-10-06 confirmed the active tab audio track and audible playback path work.
 - Local speaker playback is now independently switchable without removing audio from the captured stream; Teams defaults to muted local playback while SharePoint/generic tabs default to audible playback.
-- End-to-end proof that a saved WebM contains the tab audio remains coupled to DEV-004 runtime verification.
+- User runtime verification on 2026-10-06 confirmed saved WebM audio remains present even when local speaker playback is muted.
+- DEV-003 complete.
 
 ### DEV-004 — Local WebM recording
-**Status:** Implemented — browser runtime verification pending
+**Status:** Complete
 
 Acceptance criteria:
 - Record using MediaRecorder.
@@ -117,7 +118,8 @@ Evidence:
 - Recorder emits 5-second chunks and finalizes them to a WebM when capture stops.
 - A browser download is triggered from the offscreen document.
 - Filenames are sanitized and include the source title plus capture date.
-- Runtime verification is required to confirm the WebM downloads successfully and includes both video and audio.
+- User runtime verification on 2026-10-06 confirmed WebM download, video, audio, filename generation, and muted-speaker capture behaviour.
+- DEV-004 complete.
 
 ### DEV-005 — Recording status
 **Status:** Implemented — browser runtime verification pending
@@ -132,8 +134,10 @@ Evidence:
 - Toolbar title reflects the active recording source.
 - Popup calculates elapsed duration from persisted startedAt state.
 - Existing persisted state keeps Stop available after reopening the popup.
-- Pause/error badge states are not yet implemented; those remain part of completing this item.
-- Runtime verification is required for badge/timer behaviour.
+- Pause/resume is now implemented in the offscreen MediaRecorder and exposed in the popup.
+- Toolbar badges now show `REC`, `II`, or `!` for recording, paused, and error states.
+- Elapsed time excludes paused duration.
+- User runtime verification on 2026-10-06 confirmed the prior recording badge/timer/stop workflow works; pause/error state runtime verification remains pending before marking DEV-005 complete.
 
 ### DEV-006 — SharePoint detection
 **Status:** Not started
