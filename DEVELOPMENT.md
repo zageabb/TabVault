@@ -220,6 +220,39 @@ Acceptance criteria:
 - Configurable filename template.
 - Sanitize illegal filename characters.
 
+
+### DEV-015 — Parallel recording sessions
+**Status:** Not started
+
+**Rationale / sequencing:**
+- Add only after the single-session recording pipeline, chunk persistence, recovery, history, quality, and destination handling are stable.
+- Parallel capture multiplies encoder, memory, storage, and failure-recovery load, so it should build on DEV-010 through DEV-014 rather than interrupt current SharePoint/Teams work.
+- Existing single-tab behaviour must remain the baseline and must not regress.
+
+**Acceptance criteria:**
+- Support more than one independently captured browser tab at the same time.
+- Each recording has its own session ID, source tab ID, source metadata, start time, elapsed time, recorder state, audio-playback preference, chunk stream, filename, and result.
+- Starting a second recording does not stop, replace, retarget, or corrupt an existing recording.
+- Each session can be paused, resumed, stopped, or opened independently.
+- Closing/reopening the popup preserves and displays all active sessions.
+- The toolbar/popup clearly indicates the number of active recordings and any paused/error sessions.
+- Local speaker playback/muting remains configurable per recording without removing audio from the recorded stream.
+- Persist chunks independently so one failed/stopped session cannot discard data belonging to another session.
+- Interrupted-recording recovery can identify and recover multiple unfinished sessions independently.
+- Recording history records each completed session separately.
+- Enforce a configurable safe concurrency limit; initial default target is 3 simultaneous recordings, subject to runtime performance validation.
+- When the configured limit is reached, refuse additional capture cleanly and explain why rather than disrupting active recordings.
+- Validate parallel recording with at least two simultaneous tabs, including independent stop order and successful playable output from both.
+- Performance validation should record CPU/memory/storage behaviour for two and three concurrent 1080p-class sources where practical.
+
+**Likely implementation shape:**
+- Replace the current singleton active-capture state with a recording-session registry keyed by session ID.
+- Keep one independent MediaRecorder/capture context per session.
+- Treat the service worker as the coordinator; recording lifetime must not depend on popup lifetime or on the service worker remaining continuously awake.
+- Extend popup UI from a single active recorder to an active-recordings list with per-session controls.
+- Reuse DEV-010 chunk persistence and DEV-011 recovery primitives per session rather than introducing a separate multi-session storage path.
+
+
 ## Later Ideas
 
 - Recording markers/bookmarks.
