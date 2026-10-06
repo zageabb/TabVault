@@ -65,13 +65,22 @@ Evidence:
 - DEV-001 complete.
 
 ### DEV-002 — Tab capture
-**Status:** Not started
+**Status:** Implemented — browser runtime verification pending
 
 Acceptance criteria:
 - Start capture from the popup.
 - Capture only the selected tab.
 - Capture continues after popup closes.
 - Switching to other tabs/windows does not change the selected capture source.
+
+Evidence:
+- `manifest.json` now requests `tabCapture` and `offscreen` and requires Chrome 116+.
+- The popup starts/stops capture and records the selected `tabId`.
+- The service worker obtains a media stream ID for that exact `targetTabId`.
+- `src/recorder/recorder.html` and `recorder.js` consume the stream in an offscreen document, so the capture lifecycle is independent of the popup.
+- Capture state is stored in `chrome.storage.local`, allowing the popup to reopen and show the active source.
+- Stop/error lifecycle handling clears capture state.
+- Browser runtime verification is still required before DEV-002 can be marked complete.
 
 ### DEV-003 — Audio capture
 **Status:** Not started
