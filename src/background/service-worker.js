@@ -399,10 +399,13 @@ async function setLocalPlayback(enabled) {
 }
 
 chrome.runtime.onInstalled.addListener(async () => {
+  const current = await readState();
   await chrome.storage.local.set({
     tabVault: {
+      ...current,
       version: chrome.runtime.getManifest().version,
-      recording: null
+      recording: null,
+      history: Array.isArray(current.history) ? current.history : []
     }
   });
   await updateBadge(null);
