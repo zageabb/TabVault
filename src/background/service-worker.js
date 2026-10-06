@@ -6,12 +6,56 @@ const SOURCE_TYPES = {
 
 const OFFSCREEN_DOCUMENT_PATH = "src/recorder/recorder.html";
 
+const HISTORY_LIMIT = 50;
+
 async function readState() {
   const stored = await chrome.storage.local.get("tabVault");
   return stored.tabVault || {
     version: chrome.runtime.getManifest().version,
-    recording: null
+    recording: null,
+    history: []
   };
+}
+
+function recordingDurationMs(recording, endedAt = Date.now()) {
+  if (!recording?.startedAt) {
+    return null;
+  }
+
+  let pausedMs = Number(recording.totalPausedMs || 0);
+
+  if (recording.status === "paused" && recording.pausedAt) {
+    pausedMs += Math.max(0, endedAt - Number(recording.pausedAt));
+  }
+
+  return Math.max(0, endedAt - Number(recording.startedAt) - pausedMs);
+}
+
+async function appendHistory(entry) {
+  const current = await readState();
+  const history = Array.isArray(current.history) ? current.history : [];
+  const nextEntry = {
+    id: entry.id || crypto.randomUUID(),
+    title: entry.title || "Untitled recording",
+    sourceType: entry.sourceType || SOURCE_TYPES.GENERIC,
+    startedAt: entry.startedAt || null,
+    endedAt: entry.endedAt || Date.now(),
+    durationMs: entry.durationMs ?? null,
+    result: entry.result || "saved",
+    filename: entry.filename || null,
+    size: Number(entry.size || 0),
+    recovered: Boolean(entry.recovered)
+  };
+
+  const nextHistory = [nextEntry, ...history].slice(0, HISTORY_LIMIT);
+  await chrome.storage.local.set({
+    tabVault: {
+      ...current,
+      history: nextHistory
+    }
+  });
+
+  return nextEntry;
 }
 
 async function updateBadge(recording) {
@@ -85,6 +129,10 @@ async function listRecoverableSessions() {
 
 async function recoverSession(sessionId) {
   await ensureOffscreenDocument();
+
+  const sessions = await listRecoverableSessions();
+  const session = sessions.find((item) => item.sessionId === sessionId) || null;
+
   const response = await chrome.runtime.sendMessage({
     type: "TABVAULT_OFFSCREEN_RECOVER",
     sessionId
@@ -94,7 +142,24 @@ async function recoverSession(sessionId) {
     throw new Error(response?.error || "Unable to recover recording.");
   }
 
-  return response.recording;
+  const recording = response.recording;
+
+  if (recording?.saved) {
+    const endedAt = Date.now();
+    await appendHistory({
+      title: session?.title || "Recovered recording",
+      sourceType: session?.sourceType || SOURCE_TYPES.GENERIC,
+      startedAt: session?.startedAt || null,
+      endedAt,
+      durationMs: session?.startedAt ? Math.max(0, endedAt - Number(session.startedAt)) : null,
+      result: "recovered",
+      filename: recording.filename,
+      size: recording.size,
+      recovered: true
+    });
+  }
+
+  return recording;
 }
 
 async function discardRecoverableSession(sessionId) {
@@ -247,9 +312,24 @@ async function stopCapture() {
     throw new Error(response.error || "Unable to stop tab capture.");
   }
 
+  const endedAt = Date.now();
+  const result = response?.recording || null;
+
+  if (result?.saved) {
+    await appendHistory({
+      title: current.recording.title,
+      sourceType: current.recording.sourceType,
+      startedAt: current.recording.startedAt,
+      endedAt,
+      durationMs: recordingDurationMs(current.recording, endedAt),
+      result: "saved",
+      filename: result.filename,
+      size: result.size
+    });
+  }
+
   await writeState({ recording: null });
-  return response?.recording || null;
-}
+  return result;
 
 async function setRecordingPaused(paused) {
   const current = await readState();
@@ -392,6 +472,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message?.type === "TABVAULT_CLEAR_HISTORY") {
+    readState()
+      .then((state) => chrome.storage.local.set({
+        tabVault: {
+          ...state,
+          history: []
+        }
+      }))
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
   if (message?.type === "TABVAULT_GET_STATE") {
     readState()
       .then((state) => sendResponse({ ok: true, state }))
@@ -466,9 +559,27 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (message?.type === "TABVAULT_CAPTURE_ENDED") {
-    writeState({ recording: null })
-      .then(() => sendResponse({ ok: true }))
-      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    (async () => {
+      const current = await readState();
+      const active = current.recording;
+      const endedAt = Date.now();
+
+      if (active && message.recording?.saved) {
+        await appendHistory({
+          title: active.title,
+          sourceType: active.sourceType,
+          startedAt: active.startedAt,
+          endedAt,
+          durationMs: recordingDurationMs(active, endedAt),
+          result: "saved",
+          filename: message.recording.filename,
+          size: message.recording.size
+        });
+      }
+
+      await writeState({ recording: null });
+      sendResponse({ ok: true });
+    })().catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }
 
