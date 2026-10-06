@@ -163,6 +163,43 @@ function setError(message = "") {
   node.classList.toggle("hidden", !message);
 }
 
+function renderTeamsControlState(node, control) {
+  if (!node) {
+    return;
+  }
+
+  if (!control?.detected) {
+    node.textContent = "Check manually";
+    return;
+  }
+
+  node.textContent = control.off ? "Off" : "On";
+}
+
+async function refreshTeamsCompanionState() {
+  if (activeSource?.type !== "teams" || !activeTab?.id) {
+    return;
+  }
+
+  const response = await chrome.runtime.sendMessage({
+    type: "TABVAULT_GET_TEAMS_STATE",
+    tabId: activeTab.id
+  });
+
+  if (!response?.ok) {
+    throw new Error(response?.error || "Unable to inspect Teams controls.");
+  }
+
+  renderTeamsControlState(
+    document.getElementById("teamsMicState"),
+    response.state?.microphone
+  );
+  renderTeamsControlState(
+    document.getElementById("teamsCameraState"),
+    response.state?.camera
+  );
+}
+
 function renderRecordingState(recording) {
   const status = document.getElementById("status");
   const button = document.getElementById("recordButton");
@@ -171,6 +208,8 @@ function renderRecordingState(recording) {
   const audioStatus = document.getElementById("audioStatus");
   const localPlayback = document.getElementById("localPlayback");
   const sharePointOptions = document.getElementById("sharePointOptions");
+  const teamsCompanion = document.getElementById("teamsCompanion");
+  const teamsSpeakerState = document.getElementById("teamsSpeakerState");
   const details = document.getElementById("captureDetails");
   const captureTitle = document.getElementById("captureTitle");
   const captureHint = document.getElementById("captureHint");
@@ -208,6 +247,14 @@ function renderRecordingState(recording) {
   }
 
   sharePointOptions.classList.toggle("hidden", activeSource?.type !== "sharepoint");
+  teamsCompanion.classList.toggle("hidden", activeSource?.type !== "teams");
+
+  if (activeSource?.type === "teams") {
+    const speakerMuted = active
+      ? !Boolean(recording.localPlaybackEnabled)
+      : !Boolean(localPlayback.checked);
+    teamsSpeakerState.textContent = speakerMuted ? "Muted" : "On";
+  }
 
   details.classList.toggle("hidden", !active && !errored);
 
@@ -363,6 +410,15 @@ async function init() {
 
   const state = await getState();
   renderRecordingState(state.recording);
+
+  if (activeSource.type === "teams") {
+    try {
+      await refreshTeamsCompanionState();
+    } catch {
+      document.getElementById("teamsMicState").textContent = "Check manually";
+      document.getElementById("teamsCameraState").textContent = "Check manually";
+    }
+  }
 
   pauseButton.addEventListener("click", async () => {
     if (!currentRecording) {
