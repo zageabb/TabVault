@@ -66,8 +66,47 @@ async function ensureOffscreenDocument() {
   await chrome.offscreen.createDocument({
     url: OFFSCREEN_DOCUMENT_PATH,
     reasons: ["USER_MEDIA"],
-    justification: "Keep the selected browser tab capture alive after the popup closes."
+    justification: "Keep selected tab capture and persisted recording recovery available after the popup closes."
   });
+}
+
+async function listRecoverableSessions() {
+  await ensureOffscreenDocument();
+  const response = await chrome.runtime.sendMessage({
+    type: "TABVAULT_OFFSCREEN_LIST_RECOVERABLE"
+  });
+
+  if (!response?.ok) {
+    throw new Error(response?.error || "Unable to inspect recoverable recordings.");
+  }
+
+  return response.sessions || [];
+}
+
+async function recoverSession(sessionId) {
+  await ensureOffscreenDocument();
+  const response = await chrome.runtime.sendMessage({
+    type: "TABVAULT_OFFSCREEN_RECOVER",
+    sessionId
+  });
+
+  if (!response?.ok) {
+    throw new Error(response?.error || "Unable to recover recording.");
+  }
+
+  return response.recording;
+}
+
+async function discardRecoverableSession(sessionId) {
+  await ensureOffscreenDocument();
+  const response = await chrome.runtime.sendMessage({
+    type: "TABVAULT_OFFSCREEN_DISCARD_RECOVERY",
+    sessionId
+  });
+
+  if (!response?.ok) {
+    throw new Error(response?.error || "Unable to discard recoverable recording.");
+  }
 }
 
 async function installTeamsInspector(tabId) {
@@ -328,6 +367,27 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "TABVAULT_GET_TEAMS_STATE") {
     getTeamsState(message.tabId)
       .then((state) => sendResponse(state))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  if (message?.type === "TABVAULT_LIST_RECOVERABLE") {
+    listRecoverableSessions()
+      .then((sessions) => sendResponse({ ok: true, sessions }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  if (message?.type === "TABVAULT_RECOVER_SESSION") {
+    recoverSession(message.sessionId)
+      .then((recording) => sendResponse({ ok: true, recording }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  if (message?.type === "TABVAULT_DISCARD_RECOVERY") {
+    discardRecoverableSession(message.sessionId)
+      .then(() => sendResponse({ ok: true }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }
