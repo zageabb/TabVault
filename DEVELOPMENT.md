@@ -209,7 +209,7 @@ Evidence:
 - DEV-009 complete.
 
 ### DEV-010 — Chunked persistence
-**Status:** Implemented — browser runtime verification pending
+**Status:** Complete
 
 Acceptance criteria:
 - Recording is emitted in bounded chunks.
@@ -225,15 +225,26 @@ Evidence:
 - Only finalization loads persisted chunks to create the downloadable Blob; recording duration no longer causes an ever-growing JavaScript chunk array.
 - Persisted chunks are deleted after a successful or intentionally discarded finalization.
 - The storage shape is intentionally compatible with DEV-011 interrupted-recording recovery.
-- Browser runtime verification of normal recording/download behaviour after the persistence change is pending.
+- User runtime verification on 2026-10-06 confirmed normal recording, pause/resume, speaker mute, saved WebM, and SharePoint auto-stop still work with IndexedDB persistence.
+- DEV-010 complete.
 
 ### DEV-011 — Interrupted recording recovery
-**Status:** Not started
+**Status:** Implemented — browser runtime verification pending
 
 Acceptance criteria:
 - Detect unfinished recording state.
 - Recover all safely persisted chunks after extension/browser restart where possible.
 - Never silently discard recoverable recording data.
+
+Evidence:
+- Popup queries the offscreen IndexedDB store for unfinished sessions and shows a Recoverable recordings card when persisted chunks exist.
+- Each recoverable session displays title, start time, chunk count, and persisted size.
+- Recover reconstructs a WebM from the safely persisted chunks, downloads it, and only then removes that session from IndexedDB.
+- Recoverable data remains stored if recovery fails.
+- Discard is explicit and requires user confirmation; TabVault never silently deletes unfinished-session chunks.
+- Browser startup clears only the stale live-capture state, not IndexedDB recovery data.
+- The recovery storage model supports multiple unfinished sessions independently, which also prepares for DEV-015.
+- Runtime verification of an intentionally interrupted recording is pending.
 
 ### DEV-012 — Recording history
 **Status:** Not started
@@ -290,6 +301,25 @@ Acceptance criteria:
 - Extend popup UI from a single active recorder to an active-recordings list with per-session controls.
 - Reuse DEV-010 chunk persistence and DEV-011 recovery primitives per session rather than introducing a separate multi-session storage path.
 
+
+### DEV-016 — Window / screen capture mode
+**Status:** Not started
+
+**Rationale / sequencing:**
+- Generic tab capture can miss transient browser/native compositor UI such as native select dropdowns, context menus, date pickers, and some browser-level overlays.
+- Keep isolated tab capture as the preferred mode for Teams and SharePoint.
+- Add a higher-level window/screen capture option for software demonstrations where transient UI must appear in the recording.
+- Implement after the current reliability/storage sequence so it can reuse persistence, recovery, history, quality, and destination services.
+
+**Acceptance criteria:**
+- Generic recording mode offers a clear choice between Tab capture and Window / Screen capture.
+- Tab remains the default and preserves today's isolated-tab behaviour.
+- Window / Screen mode uses a Chrome-supported display-capture picker and never selects a screen/window silently.
+- Native dropdowns and similar compositor UI are visible in a validated Window / Screen recording where the OS/browser exposes them.
+- Audio behaviour and availability are reported clearly because system/window audio support differs by platform and selected surface.
+- Window / Screen recording uses the same chunk persistence, recovery, history, quality, and naming pipeline as tab recording.
+- Teams and SharePoint continue to recommend Tab capture unless the user explicitly chooses otherwise.
+- Runtime validation includes the reported generic-app dropdown case.
 
 ## Later Ideas
 
