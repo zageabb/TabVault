@@ -331,6 +331,7 @@ async function stopCapture() {
 
   await writeState({ recording: null });
   return result;
+}
 
 async function setRecordingPaused(paused) {
   const current = await readState();
