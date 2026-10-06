@@ -170,6 +170,7 @@ function renderRecordingState(recording) {
   const videoStatus = document.getElementById("videoStatus");
   const audioStatus = document.getElementById("audioStatus");
   const localPlayback = document.getElementById("localPlayback");
+  const sharePointOptions = document.getElementById("sharePointOptions");
   const details = document.getElementById("captureDetails");
   const captureTitle = document.getElementById("captureTitle");
   const captureHint = document.getElementById("captureHint");
@@ -205,6 +206,8 @@ function renderRecordingState(recording) {
     localPlayback.checked = activeSource?.type !== "teams";
     localPlayback.disabled = false;
   }
+
+  sharePointOptions.classList.toggle("hidden", activeSource?.type !== "sharepoint");
 
   details.classList.toggle("hidden", !active && !errored);
 
@@ -266,7 +269,9 @@ async function startCapture() {
     title: activeSource.title || activeTab.title,
     url: activeTab.url,
     sourceType: activeSource.type,
-    localPlaybackEnabled: document.getElementById("localPlayback").checked
+    localPlaybackEnabled: document.getElementById("localPlayback").checked,
+    autoStopOnEnded: document.getElementById("autoStopOnEnded")?.checked ?? false,
+    followPlayback: document.getElementById("followPlayback")?.checked ?? false
   });
 
   if (!response?.ok) {
