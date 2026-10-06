@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TabVault</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="app">
+    <header>
+      <h1>TabVault</h1>
+      <span id="status" class="status">Idle</span>
+    </header>
+
+    <section class="card">
+      <div class="label">Current source</div>
+      <div id="sourceType" class="source-type">Detecting…</div>
+      <div id="pageTitle" class="page-title"></div>
+      <div id="pageUrl" class="page-url"></div>
+    </section>
+
+    <section class="card">
+      <div class="row">
+        <span>Tab video</span>
+        <strong>Planned</strong>
+      </div>
+      <div class="row">
+        <span>Tab audio</span>
+        <strong>Planned</strong>
+      </div>
+      <div class="row">
+        <span>Upload</span>
+        <strong>Never</strong>
+      </div>
+    </section>
+
+    <button id="recordButton" type="button" disabled>Record — coming in DEV-002</button>
+
+    <p class="footnote">TabVault records locally and does not upload meeting content.</p>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>
