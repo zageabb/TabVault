@@ -12,7 +12,11 @@ function classifySource(url = "") {
 
   if (
     host === "teams.microsoft.com" ||
-    host.endsWith(".teams.microsoft.com")
+    host.endsWith(".teams.microsoft.com") ||
+    host === "teams.cloud.microsoft" ||
+    host.endsWith(".teams.cloud.microsoft") ||
+    host === "teams.live.com" ||
+    host.endsWith(".teams.live.com")
   ) {
     return { type: "teams", label: "Microsoft Teams" };
   }
