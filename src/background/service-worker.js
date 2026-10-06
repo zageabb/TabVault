@@ -79,7 +79,13 @@ async function startCapture(message) {
     url: message.url || "",
     sourceType: message.sourceType || SOURCE_TYPES.GENERIC,
     startedAt: Date.now(),
-    video: response.video || null
+    video: response.video || null,
+    audio: response.audio || {
+      available: false,
+      sampleRate: null,
+      channelCount: null,
+      localPlayback: false
+    }
   };
 
   await writeState({ recording });
