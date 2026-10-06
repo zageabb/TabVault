@@ -33,6 +33,7 @@ function classifySource(url = "") {
 
 let activeTab = null;
 let activeSource = null;
+let currentRecording = null;
 
 function setError(message = "") {
   const node = document.getElementById("errorMessage");
@@ -45,11 +46,13 @@ function renderRecordingState(recording) {
   const button = document.getElementById("recordButton");
   const videoStatus = document.getElementById("videoStatus");
   const audioStatus = document.getElementById("audioStatus");
+  const localPlayback = document.getElementById("localPlayback");
   const details = document.getElementById("captureDetails");
   const captureTitle = document.getElementById("captureTitle");
   const captureHint = document.getElementById("captureHint");
 
   const capturing = recording?.status === "capturing";
+  currentRecording = recording || null;
 
   status.textContent = capturing ? "Capturing" : "Idle";
   status.classList.toggle("recording", capturing);
@@ -59,6 +62,14 @@ function renderRecordingState(recording) {
   audioStatus.textContent = capturing
     ? (recording.audio?.available ? "Active" : "Unavailable")
     : "Ready";
+
+  if (capturing) {
+    localPlayback.checked = Boolean(recording.localPlaybackEnabled);
+    localPlayback.disabled = false;
+  } else {
+    localPlayback.checked = activeSource?.type !== "teams";
+    localPlayback.disabled = false;
+  }
 
   details.classList.toggle("hidden", !capturing);
 
@@ -70,7 +81,10 @@ function renderRecordingState(recording) {
         : "Capture continues from the original tab while you work here.";
 
     const audioHint = recording.audio?.available
-      ? " Tab audio is being captured; microphone is not requested."
+      ? " Tab audio is being captured; microphone is not requested." +
+        (recording.localPlaybackEnabled
+          ? " Speaker playback is on."
+          : " Speaker playback is muted while recording continues.")
       : " No tab audio track is currently available.";
 
     captureHint.textContent = sourceHint + audioHint;
@@ -102,7 +116,8 @@ async function startCapture() {
     tabId: activeTab.id,
     title: activeTab.title,
     url: activeTab.url,
-    sourceType: activeSource.type
+    sourceType: activeSource.type,
+    localPlaybackEnabled: document.getElementById("localPlayback").checked
   });
 
   if (!response?.ok) {
@@ -122,6 +137,27 @@ async function stopCapture() {
   }
 
   renderRecordingState(null);
+
+  if (response.recording?.saved) {
+    setError(`Saved ${response.recording.filename}`);
+  }
+}
+
+async function setLocalPlayback(enabled) {
+  if (!currentRecording) {
+    return;
+  }
+
+  const response = await chrome.runtime.sendMessage({
+    type: "TABVAULT_SET_LOCAL_PLAYBACK",
+    enabled
+  });
+
+  if (!response?.ok) {
+    throw new Error(response?.error || "Unable to change speaker playback.");
+  }
+
+  renderRecordingState(response.recording);
 }
 
 async function init() {
@@ -129,6 +165,7 @@ async function init() {
   const pageTitle = document.getElementById("pageTitle");
   const pageUrl = document.getElementById("pageUrl");
   const recordButton = document.getElementById("recordButton");
+  const localPlayback = document.getElementById("localPlayback");
 
   [activeTab] = await chrome.tabs.query({
     active: true,
@@ -144,6 +181,24 @@ async function init() {
 
   const state = await getState();
   renderRecordingState(state.recording);
+
+  localPlayback.addEventListener("change", async () => {
+    if (!currentRecording) {
+      return;
+    }
+
+    setError("");
+    localPlayback.disabled = true;
+
+    try {
+      await setLocalPlayback(localPlayback.checked);
+    } catch (error) {
+      localPlayback.checked = !localPlayback.checked;
+      setError(error.message);
+    } finally {
+      localPlayback.disabled = false;
+    }
+  });
 
   recordButton.addEventListener("click", async () => {
     setError("");
