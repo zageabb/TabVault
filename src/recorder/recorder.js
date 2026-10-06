@@ -176,6 +176,69 @@ async function readPersistedChunks(sessionId) {
   }
 }
 
+async function listPersistedSessions() {
+  const db = await openRecordingDb();
+
+  try {
+    return await new Promise((resolve, reject) => {
+      const transaction = db.transaction(SESSIONS_STORE, "readonly");
+      const store = transaction.objectStore(SESSIONS_STORE);
+      const request = store.getAll();
+
+      request.addEventListener("success", () => {
+        const sessions = (request.result || [])
+          .filter((session) => Number(session.chunkCount || 0) > 0)
+          .sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
+        resolve(sessions);
+      });
+
+      request.addEventListener("error", () => reject(request.error));
+    });
+  } finally {
+    db.close();
+  }
+}
+
+async function recoverPersistedSession(sessionId) {
+  const sessions = await listPersistedSessions();
+  const session = sessions.find((item) => item.sessionId === sessionId);
+
+  if (!session) {
+    throw new Error("Recoverable recording session was not found.");
+  }
+
+  const chunks = await readPersistedChunks(sessionId);
+
+  if (!chunks.length) {
+    throw new Error("No persisted media chunks were found for this recording.");
+  }
+
+  const mimeType = session.mimeType || "video/webm";
+  const blob = new Blob(chunks, { type: mimeType });
+  const filename = buildFilename({
+    title: session.title || "Recovered TabVault recording",
+    startedAt: session.startedAt || Date.now()
+  });
+
+  if (blob.size <= 0) {
+    throw new Error("Recovered recording is empty.");
+  }
+
+  downloadBlob(blob, filename);
+
+  await deletePersistedSession(sessionId);
+
+  return {
+    saved: true,
+    recovered: true,
+    filename,
+    size: blob.size,
+    mimeType,
+    chunkCount: chunks.length,
+    sessionId
+  };
+}
+
 async function deletePersistedSession(sessionId) {
   if (!sessionId) {
     return;
@@ -557,6 +620,27 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       sendResponse({ ok: false, error: error.message });
     }
     return false;
+  }
+
+  if (message?.type === "TABVAULT_OFFSCREEN_LIST_RECOVERABLE") {
+    listPersistedSessions()
+      .then((sessions) => sendResponse({ ok: true, sessions }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  if (message?.type === "TABVAULT_OFFSCREEN_RECOVER") {
+    recoverPersistedSession(message.sessionId)
+      .then((recording) => sendResponse({ ok: true, recording }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  if (message?.type === "TABVAULT_OFFSCREEN_DISCARD_RECOVERY") {
+    deletePersistedSession(message.sessionId)
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
   }
 
   if (message?.type === "TABVAULT_OFFSCREEN_STOP") {
