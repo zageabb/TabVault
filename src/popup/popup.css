@@ -148,3 +148,15 @@ button.secondary {
 .status.errored {
   font-weight: 700;
 }
+
+
+.source-mode {
+  display: inline-block;
+  margin-top: 7px;
+  padding: 3px 7px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.8;
+}
