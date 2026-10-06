@@ -180,3 +180,29 @@ button.secondary {
 .recovery-actions button {
   flex: 1;
 }
+
+
+.history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.history-item {
+  padding: 9px 0;
+  border-top: 1px solid color-mix(in srgb, CanvasText 12%, transparent);
+}
+
+.history-item:first-child {
+  border-top: 0;
+}
+
+.text-button {
+  width: auto;
+  padding: 2px 0;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 600;
+}
