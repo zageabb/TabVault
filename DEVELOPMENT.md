@@ -122,7 +122,7 @@ Evidence:
 - DEV-004 complete.
 
 ### DEV-005 — Recording status
-**Status:** Implemented — browser runtime verification pending
+**Status:** Complete
 
 Acceptance criteria:
 - Toolbar badge indicates idle / recording / paused / error.
@@ -137,7 +137,8 @@ Evidence:
 - Pause/resume is now implemented in the offscreen MediaRecorder and exposed in the popup.
 - Toolbar badges now show `REC`, `II`, or `!` for recording, paused, and error states.
 - Elapsed time excludes paused duration.
-- User runtime verification on 2026-10-06 confirmed the prior recording badge/timer/stop workflow works; pause/error state runtime verification remains pending before marking DEV-005 complete.
+- User runtime verification on 2026-10-06 confirmed pause/resume, `REC`/`II` badge transitions, elapsed-time behaviour, and saved output behaviour.
+- DEV-005 complete.
 
 ### DEV-006 — SharePoint detection
 **Status:** Not started
