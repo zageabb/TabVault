@@ -70,6 +70,23 @@ async function ensureOffscreenDocument() {
   });
 }
 
+async function installSharePointLifecycle(tabId) {
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: ["src/content/sharepoint-playback.js"]
+  });
+}
+
+async function getSharePointMediaState(tabId) {
+  try {
+    return await chrome.tabs.sendMessage(tabId, {
+      type: "TABVAULT_GET_MEDIA_STATE"
+    });
+  } catch {
+    return { ok: true, media: null };
+  }
+}
+
 async function startCapture(message) {
   const current = await readState();
 
@@ -94,6 +111,14 @@ async function startCapture(message) {
     typeof message.localPlaybackEnabled === "boolean"
       ? message.localPlaybackEnabled
       : message.sourceType !== SOURCE_TYPES.TEAMS;
+
+  if (message.sourceType === SOURCE_TYPES.SHAREPOINT) {
+    try {
+      await installSharePointLifecycle(message.tabId);
+    } catch {
+      // Recording still works if playback lifecycle inspection is unavailable.
+    }
+  }
 
   const response = await chrome.runtime.sendMessage({
     type: "TABVAULT_OFFSCREEN_START",
@@ -125,10 +150,22 @@ async function startCapture(message) {
       sampleRate: null,
       channelCount: null,
       localPlayback: false
+    },
+    lifecycle: {
+      autoStopOnEnded: Boolean(message.autoStopOnEnded),
+      followPlayback: Boolean(message.followPlayback)
     }
   };
 
   await writeState({ recording });
+
+  if (recording.sourceType === SOURCE_TYPES.SHAREPOINT && recording.lifecycle.followPlayback) {
+    const state = await getSharePointMediaState(recording.tabId);
+    if (state?.media?.paused && !state.media.ended) {
+      return await setRecordingPaused(true);
+    }
+  }
+
   return recording;
 }
 
@@ -297,6 +334,44 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       .then((recording) => sendResponse({ ok: true, recording }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
+  }
+
+  if (message?.type === "TABVAULT_SHAREPOINT_MEDIA_EVENT") {
+    (async () => {
+      const current = await readState();
+      const recording = current.recording;
+
+      if (!recording || recording.sourceType !== SOURCE_TYPES.SHAREPOINT) {
+        return;
+      }
+
+      if (message.event === "ended" && recording.lifecycle?.autoStopOnEnded) {
+        await stopCapture();
+        return;
+      }
+
+      if (!recording.lifecycle?.followPlayback) {
+        return;
+      }
+
+      if ((message.event === "play" || message.event === "playing") && recording.status === "paused") {
+        await setRecordingPaused(false);
+      } else if (message.event === "pause" && recording.status === "capturing") {
+        await setRecordingPaused(true);
+      }
+    })().catch(async (error) => {
+      const current = await readState();
+      if (current.recording) {
+        await writeState({
+          recording: {
+            ...current.recording,
+            status: "error",
+            error: error.message
+          }
+        });
+      }
+    });
+    return false;
   }
 
   if (message?.type === "TABVAULT_CAPTURE_ENDED") {
