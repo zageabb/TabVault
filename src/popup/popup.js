@@ -1,10 +1,71 @@
-function classifySource(url = "") {
+function decodeSharePointTitle(parsed, fallbackTitle = "") {
+  const candidates = [];
+
+  const id = parsed.searchParams.get("id");
+  if (id) {
+    try {
+      candidates.push(decodeURIComponent(id));
+    } catch {
+      candidates.push(id);
+    }
+  }
+
+  const file = parsed.searchParams.get("file");
+  if (file) {
+    try {
+      candidates.push(decodeURIComponent(file));
+    } catch {
+      candidates.push(file);
+    }
+  }
+
+  candidates.push(parsed.pathname);
+
+  for (const candidate of candidates) {
+    const normalized = String(candidate || "").replace(/\\/g, "/");
+    const filename = normalized.split("/").filter(Boolean).pop();
+
+    if (!filename) {
+      continue;
+    }
+
+    const decoded = filename
+      .replace(/%([0-9A-Fa-f]{2})/g, (match) => {
+        try {
+          return decodeURIComponent(match);
+        } catch {
+          return match;
+        }
+      })
+      .replace(/\.mp4$/i, "")
+      .replace(/[-_]?Meeting Recording$/i, "")
+      .replace(/[-_]?\d{8}_\d{6}$/i, "")
+      .replace(/%20/g, " ")
+      .replace(/_/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (decoded && decoded.toLowerCase() !== "stream.aspx") {
+      return decoded;
+    }
+  }
+
+  return fallbackTitle || "SharePoint recording";
+}
+
+function classifySource(url = "", pageTitle = "") {
   let parsed;
 
   try {
     parsed = new URL(url);
   } catch {
-    return { type: "generic", label: "Generic tab" };
+    return {
+      type: "generic",
+      label: "Generic tab",
+      title: pageTitle || "Untitled tab",
+      mode: "Generic tab recording",
+      hint: "Records only this browser tab and its tab audio."
+    };
   }
 
   const host = parsed.hostname.toLowerCase();
@@ -18,17 +79,44 @@ function classifySource(url = "") {
     host === "teams.live.com" ||
     host.endsWith(".teams.live.com")
   ) {
-    return { type: "teams", label: "Microsoft Teams" };
+    return {
+      type: "teams",
+      label: "Microsoft Teams",
+      title: pageTitle || "Microsoft Teams",
+      mode: "Teams companion recording",
+      hint: "Designed for a passive browser meeting while you interact through Teams desktop."
+    };
   }
 
-  if (
+  const isSharePointHost =
     host.endsWith(".sharepoint.com") ||
-    path.includes("/stream.aspx")
-  ) {
-    return { type: "sharepoint", label: "SharePoint / Stream" };
+    host.endsWith(".sharepoint-df.com");
+
+  const isStreamPage =
+    path.includes("/_layouts/15/stream.aspx") ||
+    path.includes("/stream.aspx");
+
+  const looksLikeRecording =
+    /\/recordings?\//i.test(parsed.pathname) ||
+    /meeting[%20 _-]*recording/i.test(url);
+
+  if (isSharePointHost || isStreamPage || looksLikeRecording) {
+    return {
+      type: "sharepoint",
+      label: "SharePoint / Stream",
+      title: decodeSharePointTitle(parsed, pageTitle),
+      mode: isStreamPage ? "SharePoint recording playback" : "SharePoint media",
+      hint: "Optimised for recording SharePoint/Stream playback locally."
+    };
   }
 
-  return { type: "generic", label: "Generic tab" };
+  return {
+    type: "generic",
+    label: "Generic tab",
+    title: pageTitle || "Untitled tab",
+    mode: "Generic tab recording",
+    hint: "Records only this browser tab and its tab audio."
+  };
 }
 
 let activeTab = null;
@@ -175,7 +263,7 @@ async function startCapture() {
   const response = await chrome.runtime.sendMessage({
     type: "TABVAULT_START_CAPTURE",
     tabId: activeTab.id,
-    title: activeTab.title,
+    title: activeSource.title || activeTab.title,
     url: activeTab.url,
     sourceType: activeSource.type,
     localPlaybackEnabled: document.getElementById("localPlayback").checked
@@ -251,12 +339,22 @@ async function init() {
     currentWindow: true
   });
 
-  activeSource = classifySource(activeTab?.url);
+  activeSource = classifySource(activeTab?.url, activeTab?.title);
+
+  const sourceMode = document.getElementById("sourceMode");
+  const sourceHint = document.getElementById("sourceHint");
 
   sourceType.textContent = activeSource.label;
   sourceType.dataset.sourceType = activeSource.type;
-  pageTitle.textContent = activeTab?.title || "Untitled tab";
+
+  sourceMode.textContent = activeSource.mode || "";
+  sourceMode.classList.toggle("hidden", !activeSource.mode);
+
+  pageTitle.textContent = activeSource.title || activeTab?.title || "Untitled tab";
   pageUrl.textContent = activeTab?.url || "URL unavailable";
+
+  sourceHint.textContent = activeSource.hint || "";
+  sourceHint.classList.toggle("hidden", !activeSource.hint);
 
   const state = await getState();
   renderRecordingState(state.recording);
