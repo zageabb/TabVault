@@ -70,6 +70,30 @@ async function ensureOffscreenDocument() {
   });
 }
 
+async function installTeamsInspector(tabId) {
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: ["src/content/teams-companion.js"]
+  });
+}
+
+async function getTeamsState(tabId) {
+  try {
+    await installTeamsInspector(tabId);
+    return await chrome.tabs.sendMessage(tabId, {
+      type: "TABVAULT_GET_TEAMS_STATE"
+    });
+  } catch {
+    return {
+      ok: true,
+      state: {
+        microphone: { detected: false, off: null },
+        camera: { detected: false, off: null }
+      }
+    };
+  }
+}
+
 async function installSharePointLifecycle(tabId) {
   await chrome.scripting.executeScript({
     target: { tabId },
@@ -299,6 +323,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "TABVAULT_PING") {
     sendResponse({ ok: true, sourceTypes: SOURCE_TYPES });
     return false;
+  }
+
+  if (message?.type === "TABVAULT_GET_TEAMS_STATE") {
+    getTeamsState(message.tabId)
+      .then((state) => sendResponse(state))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
   }
 
   if (message?.type === "TABVAULT_GET_STATE") {
