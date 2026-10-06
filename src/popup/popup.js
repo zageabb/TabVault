@@ -44,6 +44,7 @@ function renderRecordingState(recording) {
   const status = document.getElementById("status");
   const button = document.getElementById("recordButton");
   const videoStatus = document.getElementById("videoStatus");
+  const audioStatus = document.getElementById("audioStatus");
   const details = document.getElementById("captureDetails");
   const captureTitle = document.getElementById("captureTitle");
   const captureHint = document.getElementById("captureHint");
@@ -55,15 +56,24 @@ function renderRecordingState(recording) {
   button.textContent = capturing ? "Stop tab capture" : "Start tab capture";
   button.dataset.action = capturing ? "stop" : "start";
   videoStatus.textContent = capturing ? "Active" : "Ready";
+  audioStatus.textContent = capturing
+    ? (recording.audio?.available ? "Active" : "Unavailable")
+    : "Ready";
 
   details.classList.toggle("hidden", !capturing);
 
   if (capturing) {
     captureTitle.textContent = recording.title || "Untitled tab";
-    captureHint.textContent =
+    const sourceHint =
       recording.tabId === activeTab?.id
         ? "This tab is the active capture source."
         : "Capture continues from the original tab while you work here.";
+
+    const audioHint = recording.audio?.available
+      ? " Tab audio is being captured; microphone is not requested."
+      : " No tab audio track is currently available.";
+
+    captureHint.textContent = sourceHint + audioHint;
   } else {
     captureTitle.textContent = "";
     captureHint.textContent = "";
