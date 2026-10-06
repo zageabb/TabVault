@@ -62,10 +62,21 @@ async function startCapture(message) {
     targetTabId: message.tabId
   });
 
+  const startedAt = Date.now();
+  const localPlaybackEnabled =
+    typeof message.localPlaybackEnabled === "boolean"
+      ? message.localPlaybackEnabled
+      : message.sourceType !== SOURCE_TYPES.TEAMS;
+
   const response = await chrome.runtime.sendMessage({
     type: "TABVAULT_OFFSCREEN_START",
     streamId,
-    tabId: message.tabId
+    tabId: message.tabId,
+    localPlaybackEnabled,
+    meta: {
+      title: message.title || "Untitled tab",
+      startedAt
+    }
   });
 
   if (!response?.ok) {
@@ -78,7 +89,9 @@ async function startCapture(message) {
     title: message.title || "Untitled tab",
     url: message.url || "",
     sourceType: message.sourceType || SOURCE_TYPES.GENERIC,
-    startedAt: Date.now(),
+    startedAt,
+    localPlaybackEnabled,
+    recorder: response.recorder || null,
     video: response.video || null,
     audio: response.audio || {
       available: false,
@@ -108,7 +121,36 @@ async function stopCapture() {
   }
 
   await writeState({ recording: null });
-  return null;
+  return response?.recording || null;
+}
+
+async function setLocalPlayback(enabled) {
+  const current = await readState();
+
+  if (!current.recording) {
+    throw new Error("No active TabVault capture.");
+  }
+
+  const response = await chrome.runtime.sendMessage({
+    type: "TABVAULT_OFFSCREEN_SET_LOCAL_PLAYBACK",
+    enabled: Boolean(enabled)
+  });
+
+  if (!response?.ok) {
+    throw new Error(response?.error || "Unable to change local playback.");
+  }
+
+  const recording = {
+    ...current.recording,
+    localPlaybackEnabled: Boolean(enabled),
+    audio: {
+      ...(current.recording.audio || {}),
+      localPlayback: Boolean(response.audio?.localPlayback)
+    }
+  };
+
+  await writeState({ recording });
+  return recording;
 }
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -162,7 +204,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message?.type === "TABVAULT_STOP_CAPTURE") {
     stopCapture()
-      .then(() => sendResponse({ ok: true }))
+      .then((recording) => sendResponse({ ok: true, recording }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  if (message?.type === "TABVAULT_SET_LOCAL_PLAYBACK") {
+    setLocalPlayback(message.enabled)
+      .then((recording) => sendResponse({ ok: true, recording }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }
