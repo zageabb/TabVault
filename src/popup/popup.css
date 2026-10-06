@@ -116,3 +116,11 @@ button:disabled {
   width: auto;
   cursor: pointer;
 }
+
+
+.elapsed-time {
+  margin-top: 8px;
+  font-variant-numeric: tabular-nums;
+  font-size: 18px;
+  font-weight: 700;
+}
