@@ -82,3 +82,26 @@ button {
   margin-bottom: 0;
   line-height: 1.4;
 }
+
+
+.hidden {
+  display: none;
+}
+
+.status.recording {
+  font-weight: 700;
+}
+
+.error {
+  margin-top: 10px;
+  padding: 9px 10px;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
