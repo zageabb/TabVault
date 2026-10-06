@@ -158,6 +158,24 @@ function stopMediaRecorder({ save = true } = {}) {
   });
 }
 
+function pauseMediaRecorder() {
+  if (!mediaRecorder || mediaRecorder.state !== "recording") {
+    return false;
+  }
+
+  mediaRecorder.pause();
+  return true;
+}
+
+function resumeMediaRecorder() {
+  if (!mediaRecorder || mediaRecorder.state !== "paused") {
+    return false;
+  }
+
+  mediaRecorder.resume();
+  return true;
+}
+
 function startMediaRecorder(stream, meta) {
   const mimeType = chooseMimeType();
   const options = mimeType ? { mimeType } : undefined;
@@ -281,6 +299,26 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       .then((audio) => sendResponse({ ok: true, audio }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
+  }
+
+  if (message?.type === "TABVAULT_OFFSCREEN_PAUSE") {
+    try {
+      const paused = pauseMediaRecorder();
+      sendResponse({ ok: paused });
+    } catch (error) {
+      sendResponse({ ok: false, error: error.message });
+    }
+    return false;
+  }
+
+  if (message?.type === "TABVAULT_OFFSCREEN_RESUME") {
+    try {
+      const resumed = resumeMediaRecorder();
+      sendResponse({ ok: resumed });
+    } catch (error) {
+      sendResponse({ ok: false, error: error.message });
+    }
+    return false;
   }
 
   if (message?.type === "TABVAULT_OFFSCREEN_STOP") {
