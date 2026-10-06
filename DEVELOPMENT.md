@@ -191,7 +191,7 @@ Evidence:
 - DEV-008 complete.
 
 ### DEV-009 — Companion Recording Mode
-**Status:** Implemented — browser runtime verification pending
+**Status:** Complete
 
 Acceptance criteria:
 - Explain the recommended dual-client workflow.
@@ -205,15 +205,27 @@ Evidence:
 - If Teams UI state cannot be identified reliably, TabVault shows "Check manually" rather than guessing.
 - Teams local speaker playback defaults muted while the captured tab audio track remains in the recording stream.
 - Prior runtime verification already confirmed muted local speaker output does not remove captured audio.
-- Browser runtime verification of the new mic/camera readiness display is pending.
+- User runtime verification on 2026-10-06 confirmed the Teams companion panel and mic/camera readiness display behave correctly.
+- DEV-009 complete.
 
 ### DEV-010 — Chunked persistence
-**Status:** Not started
+**Status:** Implemented — browser runtime verification pending
 
 Acceptance criteria:
 - Recording is emitted in bounded chunks.
 - A long recording does not accumulate entirely in JS memory.
 - Chunk storage strategy is documented and tested.
+
+Evidence:
+- MediaRecorder continues to emit bounded 5-second chunks.
+- Each chunk is written immediately to IndexedDB in the offscreen recorder instead of being retained in an in-memory array.
+- IndexedDB uses separate sessions and chunks stores; chunks are keyed by session ID plus sequential index.
+- Per-session metadata tracks chunk count, persisted bytes, MIME type, and timestamps.
+- Chunk writes are serialized so finalization waits for every pending IndexedDB write before assembling the WebM.
+- Only finalization loads persisted chunks to create the downloadable Blob; recording duration no longer causes an ever-growing JavaScript chunk array.
+- Persisted chunks are deleted after a successful or intentionally discarded finalization.
+- The storage shape is intentionally compatible with DEV-011 interrupted-recording recovery.
+- Browser runtime verification of normal recording/download behaviour after the persistence change is pending.
 
 ### DEV-011 — Interrupted recording recovery
 **Status:** Not started
