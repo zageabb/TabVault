@@ -141,7 +141,7 @@ Evidence:
 - DEV-005 complete.
 
 ### DEV-006 — SharePoint detection
-**Status:** Implemented — browser runtime verification pending
+**Status:** Complete
 
 Acceptance criteria:
 - Detect common SharePoint / Stream playback URLs.
@@ -154,7 +154,8 @@ Evidence:
 - Common recording suffixes such as .mp4, Meeting Recording, and timestamp suffixes are removed from the display/save title.
 - Popup now shows a source-specific mode badge and SharePoint-specific guidance.
 - The cleaned SharePoint title is passed into the recording pipeline, improving saved WebM filenames.
-- Browser runtime verification against the existing Stream-on-SharePoint recording is pending.
+- User runtime verification on 2026-10-06 confirmed SharePoint/Stream classification, mode display, and clean recording-title extraction.
+- DEV-006 complete.
 
 ### DEV-007 — SharePoint playback lifecycle
 **Status:** Not started
