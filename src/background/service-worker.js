@@ -255,6 +255,7 @@ async function startCapture(message) {
     localPlaybackEnabled,
     meta: {
       title: message.title || "Untitled tab",
+      sourceType: message.sourceType || SOURCE_TYPES.GENERIC,
       startedAt
     }
   });
