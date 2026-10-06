@@ -124,3 +124,27 @@ button:disabled {
   font-size: 18px;
   font-weight: 700;
 }
+
+
+.button-row {
+  display: flex;
+  gap: 8px;
+}
+
+.button-row button {
+  flex: 1;
+}
+
+button.secondary {
+  background: transparent;
+  border: 1px solid color-mix(in srgb, CanvasText 25%, transparent);
+  color: CanvasText;
+}
+
+.status.paused {
+  font-weight: 700;
+}
+
+.status.errored {
+  font-weight: 700;
+}
