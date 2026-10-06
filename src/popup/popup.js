@@ -36,8 +36,13 @@ let activeSource = null;
 let currentRecording = null;
 let elapsedTimer = null;
 
-function formatElapsed(startedAt) {
-  const elapsedMs = Math.max(0, Date.now() - Number(startedAt || Date.now()));
+function formatElapsed(recording) {
+  const startedAt = Number(recording?.startedAt || Date.now());
+  const now = recording?.status === "paused"
+    ? Number(recording.pausedAt || Date.now())
+    : Date.now();
+  const pausedMs = Number(recording?.totalPausedMs || 0);
+  const elapsedMs = Math.max(0, now - startedAt - pausedMs);
   const totalSeconds = Math.floor(elapsedMs / 1000);
   const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
   const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
@@ -57,7 +62,7 @@ function startElapsedTimer(recording) {
   const elapsed = document.getElementById("elapsedTime");
 
   const refresh = () => {
-    elapsed.textContent = formatElapsed(recording.startedAt);
+    elapsed.textContent = formatElapsed(recording);
   };
 
   refresh();
@@ -73,6 +78,7 @@ function setError(message = "") {
 function renderRecordingState(recording) {
   const status = document.getElementById("status");
   const button = document.getElementById("recordButton");
+  const pauseButton = document.getElementById("pauseButton");
   const videoStatus = document.getElementById("videoStatus");
   const audioStatus = document.getElementById("audioStatus");
   const localPlayback = document.getElementById("localPlayback");
@@ -82,18 +88,29 @@ function renderRecordingState(recording) {
   const elapsedTime = document.getElementById("elapsedTime");
 
   const capturing = recording?.status === "capturing";
+  const paused = recording?.status === "paused";
+  const errored = recording?.status === "error";
+  const active = capturing || paused;
   currentRecording = recording || null;
 
-  status.textContent = capturing ? "Capturing" : "Idle";
+  status.textContent = capturing ? "Capturing" : paused ? "Paused" : errored ? "Error" : "Idle";
   status.classList.toggle("recording", capturing);
-  button.textContent = capturing ? "Stop tab capture" : "Start tab capture";
-  button.dataset.action = capturing ? "stop" : "start";
-  videoStatus.textContent = capturing ? "Active" : "Ready";
-  audioStatus.textContent = capturing
-    ? (recording.audio?.available ? "Active" : "Unavailable")
-    : "Ready";
+  status.classList.toggle("paused", paused);
+  status.classList.toggle("errored", errored);
 
-  if (capturing) {
+  button.textContent = active || errored ? "Stop tab capture" : "Start tab capture";
+  button.dataset.action = active || errored ? "stop" : "start";
+
+  pauseButton.classList.toggle("hidden", !active);
+  pauseButton.textContent = paused ? "Resume" : "Pause";
+  pauseButton.dataset.action = paused ? "resume" : "pause";
+
+  videoStatus.textContent = active ? "Active" : errored ? "Error" : "Ready";
+  audioStatus.textContent = active
+    ? (recording.audio?.available ? "Active" : "Unavailable")
+    : errored ? "Error" : "Ready";
+
+  if (active) {
     localPlayback.checked = Boolean(recording.localPlaybackEnabled);
     localPlayback.disabled = false;
   } else {
@@ -101,11 +118,16 @@ function renderRecordingState(recording) {
     localPlayback.disabled = false;
   }
 
-  details.classList.toggle("hidden", !capturing);
+  details.classList.toggle("hidden", !active && !errored);
 
-  if (capturing) {
+  if (active || errored) {
     captureTitle.textContent = recording.title || "Untitled tab";
-    startElapsedTimer(recording);
+    if (errored) {
+      stopElapsedTimer();
+      elapsedTime.textContent = formatElapsed(recording);
+    } else {
+      startElapsedTimer(recording);
+    }
     const sourceHint =
       recording.tabId === activeTab?.id
         ? "This tab is the active capture source."
@@ -118,7 +140,13 @@ function renderRecordingState(recording) {
           : " Speaker playback is muted while recording continues.")
       : " No tab audio track is currently available.";
 
-    captureHint.textContent = sourceHint + audioHint;
+    const stateHint = paused
+      ? " Recording is paused."
+      : errored
+        ? ` ${recording.error || "Recording encountered an error."}`
+        : "";
+
+    captureHint.textContent = sourceHint + audioHint + stateHint;
   } else {
     stopElapsedTimer();
     elapsedTime.textContent = "00:00:00";
@@ -176,6 +204,23 @@ async function stopCapture() {
   }
 }
 
+async function setPaused(paused) {
+  if (!currentRecording) {
+    return;
+  }
+
+  const response = await chrome.runtime.sendMessage({
+    type: "TABVAULT_SET_PAUSED",
+    paused
+  });
+
+  if (!response?.ok) {
+    throw new Error(response?.error || "Unable to change pause state.");
+  }
+
+  renderRecordingState(response.recording);
+}
+
 async function setLocalPlayback(enabled) {
   if (!currentRecording) {
     return;
@@ -198,6 +243,7 @@ async function init() {
   const pageTitle = document.getElementById("pageTitle");
   const pageUrl = document.getElementById("pageUrl");
   const recordButton = document.getElementById("recordButton");
+  const pauseButton = document.getElementById("pauseButton");
   const localPlayback = document.getElementById("localPlayback");
 
   [activeTab] = await chrome.tabs.query({
@@ -214,6 +260,23 @@ async function init() {
 
   const state = await getState();
   renderRecordingState(state.recording);
+
+  pauseButton.addEventListener("click", async () => {
+    if (!currentRecording) {
+      return;
+    }
+
+    setError("");
+    pauseButton.disabled = true;
+
+    try {
+      await setPaused(pauseButton.dataset.action === "pause");
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      pauseButton.disabled = false;
+    }
+  });
 
   localPlayback.addEventListener("change", async () => {
     if (!currentRecording) {
