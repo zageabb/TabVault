@@ -207,7 +207,6 @@ function renderRecordingState(recording) {
   const videoStatus = document.getElementById("videoStatus");
   const audioStatus = document.getElementById("audioStatus");
   const localPlayback = document.getElementById("localPlayback");
-  const clearHistoryButton = document.getElementById("clearHistoryButton");
   const sharePointOptions = document.getElementById("sharePointOptions");
   const teamsCompanion = document.getElementById("teamsCompanion");
   const teamsSpeakerState = document.getElementById("teamsSpeakerState");
@@ -569,6 +568,7 @@ async function init() {
   const recordButton = document.getElementById("recordButton");
   const pauseButton = document.getElementById("pauseButton");
   const localPlayback = document.getElementById("localPlayback");
+  const clearHistoryButton = document.getElementById("clearHistoryButton");
 
   [activeTab] = await chrome.tabs.query({
     active: true,
