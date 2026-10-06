@@ -22,6 +22,20 @@ async function updateBadge(recording) {
     return;
   }
 
+  if (recording?.status === "paused") {
+    await chrome.action.setBadgeText({ text: "II" });
+    await chrome.action.setBadgeBackgroundColor({ color: "#f9ab00" });
+    await chrome.action.setTitle({ title: `TabVault — paused ${recording.title || "tab"}` });
+    return;
+  }
+
+  if (recording?.status === "error") {
+    await chrome.action.setBadgeText({ text: "!" });
+    await chrome.action.setBadgeBackgroundColor({ color: "#5f6368" });
+    await chrome.action.setTitle({ title: "TabVault — recording error" });
+    return;
+  }
+
   await chrome.action.setBadgeText({ text: "" });
   await chrome.action.setTitle({ title: "TabVault" });
 }
@@ -137,6 +151,42 @@ async function stopCapture() {
   return response?.recording || null;
 }
 
+async function setRecordingPaused(paused) {
+  const current = await readState();
+
+  if (!current.recording) {
+    throw new Error("No active TabVault recording.");
+  }
+
+  const type = paused ? "TABVAULT_OFFSCREEN_PAUSE" : "TABVAULT_OFFSCREEN_RESUME";
+  const response = await chrome.runtime.sendMessage({ type });
+
+  if (!response?.ok) {
+    throw new Error(paused ? "Unable to pause recording." : "Unable to resume recording.");
+  }
+
+  const now = Date.now();
+  let totalPausedMs = Number(current.recording.totalPausedMs || 0);
+  let pausedAt = current.recording.pausedAt || null;
+
+  if (paused) {
+    pausedAt = now;
+  } else if (pausedAt) {
+    totalPausedMs += Math.max(0, now - pausedAt);
+    pausedAt = null;
+  }
+
+  const recording = {
+    ...current.recording,
+    status: paused ? "paused" : "capturing",
+    pausedAt,
+    totalPausedMs
+  };
+
+  await writeState({ recording });
+  return recording;
+}
+
 async function setLocalPlayback(enabled) {
   const current = await readState();
 
@@ -182,12 +232,24 @@ chrome.runtime.onStartup.addListener(async () => {
 });
 
 chrome.tabCapture.onStatusChanged.addListener(async (info) => {
-  if (info.status !== "stopped" && info.status !== "error") {
+  const current = await readState();
+
+  if (current.recording?.tabId !== info.tabId) {
     return;
   }
 
-  const current = await readState();
-  if (current.recording?.tabId === info.tabId) {
+  if (info.status === "error") {
+    await writeState({
+      recording: {
+        ...current.recording,
+        status: "error",
+        error: "Chrome reported a tab capture error."
+      }
+    });
+    return;
+  }
+
+  if (info.status === "stopped") {
     await writeState({ recording: null });
   }
 });
@@ -218,6 +280,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message?.type === "TABVAULT_STOP_CAPTURE") {
     stopCapture()
+      .then((recording) => sendResponse({ ok: true, recording }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  if (message?.type === "TABVAULT_SET_PAUSED") {
+    setRecordingPaused(Boolean(message.paused))
       .then((recording) => sendResponse({ ok: true, recording }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
