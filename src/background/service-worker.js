@@ -14,10 +14,23 @@ async function readState() {
   };
 }
 
+async function updateBadge(recording) {
+  if (recording?.status === "capturing") {
+    await chrome.action.setBadgeText({ text: "REC" });
+    await chrome.action.setBadgeBackgroundColor({ color: "#d93025" });
+    await chrome.action.setTitle({ title: `TabVault — recording ${recording.title || "tab"}` });
+    return;
+  }
+
+  await chrome.action.setBadgeText({ text: "" });
+  await chrome.action.setTitle({ title: "TabVault" });
+}
+
 async function writeState(patch) {
   const current = await readState();
   const next = { ...current, ...patch };
   await chrome.storage.local.set({ tabVault: next });
+  await updateBadge(next.recording);
   return next;
 }
 
@@ -153,13 +166,14 @@ async function setLocalPlayback(enabled) {
   return recording;
 }
 
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.storage.local.set({
+chrome.runtime.onInstalled.addListener(async () => {
+  await chrome.storage.local.set({
     tabVault: {
       version: chrome.runtime.getManifest().version,
       recording: null
     }
   });
+  await updateBadge(null);
 });
 
 chrome.runtime.onStartup.addListener(async () => {
