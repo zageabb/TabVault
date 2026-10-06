@@ -158,12 +158,21 @@ Evidence:
 - DEV-006 complete.
 
 ### DEV-007 — SharePoint playback lifecycle
-**Status:** Not started
+**Status:** Implemented — browser runtime verification pending
 
 Acceptance criteria:
 - Detect playback start/end where technically available.
 - Optional auto-start on playback.
 - Optional auto-stop when source playback ends.
+
+Evidence:
+- Added a SharePoint playback observer injected only into the selected tab when a SharePoint capture starts.
+- The observer tracks the largest video element and reports play, playing, pause, ended, metadata, and current state events.
+- "Stop when video ends" is available in the popup and defaults on for SharePoint.
+- "Follow video play/pause" is available as an armed mode: the user initiates TabVault once, then recording pauses/resumes with SharePoint playback.
+- If follow-playback is enabled while the source video is initially paused, MediaRecorder is paused until playback begins.
+- Lifecycle observation is best-effort and recording continues normally if the page structure prevents video inspection.
+- Browser runtime verification is pending.
 
 ### DEV-008 — Teams detection
 **Status:** Not started
