@@ -65,7 +65,7 @@ Evidence:
 - DEV-001 complete.
 
 ### DEV-002 — Tab capture
-**Status:** Implemented — browser runtime verification pending
+**Status:** Complete
 
 Acceptance criteria:
 - Start capture from the popup.
@@ -80,16 +80,26 @@ Evidence:
 - `src/recorder/recorder.html` and `recorder.js` consume the stream in an offscreen document, so the capture lifecycle is independent of the popup.
 - Capture state is stored in `chrome.storage.local`, allowing the popup to reopen and show the active source.
 - Stop/error lifecycle handling clears capture state.
-- Browser runtime verification is still required before DEV-002 can be marked complete.
+- User runtime verification passed on 2026-10-06: capture remained bound to the original tab after popup closure and while switching elsewhere.
+- DEV-002 complete.
 
 ### DEV-003 — Audio capture
-**Status:** Not started
+**Status:** Implemented — browser runtime verification pending
 
 Acceptance criteria:
 - Capture tab audio together with video when available.
 - SharePoint playback audio is present in the resulting file.
 - Teams incoming audio is present in companion mode.
 - No microphone is requested by default.
+
+Evidence:
+- Offscreen capture now requests the selected tab's audio and video from the same Chrome tab-capture stream.
+- No microphone constraints or microphone permission are requested.
+- Audio track availability, sample rate, and channel count are returned to the service worker and stored with active capture state.
+- Popup shows tab-audio state as Ready / Active / Unavailable.
+- Local audio passthrough is restored with Web Audio while capture is active so ordinary playback remains audible; companion-mode suppression can be added later under DEV-009.
+- Browser runtime verification of audible playback and an active tab audio track is pending.
+- End-to-end proof that the saved recording contains audio will be completed with DEV-004, because DEV-003 currently establishes the capture stream but does not yet write a media file.
 
 ### DEV-004 — Local WebM recording
 **Status:** Not started
