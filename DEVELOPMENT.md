@@ -45,7 +45,7 @@ Primary supported use cases:
 ## Development Order
 
 ### DEV-001 — Extension shell
-**Status:** Implemented — browser runtime verification pending
+**Status:** Complete
 
 Acceptance criteria:
 - Manifest V3 extension loads successfully.
@@ -61,7 +61,8 @@ Evidence:
 - Initial implementation committed to `main` on 2026-10-06.
 - Runtime loading in Chrome verified on 2026-10-06.
 - Initial runtime test exposed the current Teams host `teams.cloud.microsoft`, which was misclassified as Generic; detection was updated to support `teams.cloud.microsoft` (plus existing `teams.microsoft.com` and `teams.live.com`).
-- Revalidation of Teams classification is pending before marking DEV-001 complete.
+- User runtime revalidation confirmed Teams detection and popup behaviour working on 2026-10-06.
+- DEV-001 complete.
 
 ### DEV-002 — Tab capture
 **Status:** Not started
