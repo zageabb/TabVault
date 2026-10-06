@@ -158,7 +158,7 @@ Evidence:
 - DEV-006 complete.
 
 ### DEV-007 — SharePoint playback lifecycle
-**Status:** Implemented — browser runtime verification pending
+**Status:** Complete
 
 Acceptance criteria:
 - Detect playback start/end where technically available.
@@ -172,24 +172,40 @@ Evidence:
 - "Follow video play/pause" is available as an armed mode: the user initiates TabVault once, then recording pauses/resumes with SharePoint playback.
 - If follow-playback is enabled while the source video is initially paused, MediaRecorder is paused until playback begins.
 - Lifecycle observation is best-effort and recording continues normally if the page structure prevents video inspection.
-- Browser runtime verification is pending.
+- User runtime verification on 2026-10-06 confirmed follow-playback pause/resume and automatic stop/save at video end.
+- DEV-007 complete.
 
 ### DEV-008 — Teams detection
-**Status:** Not started
+**Status:** Complete
 
 Acceptance criteria:
 - Detect Teams browser meeting pages.
 - Present Teams-specific mode in UI.
 - Do not request microphone/camera merely to record the tab.
 
+Evidence:
+- Teams detection supports teams.cloud.microsoft, teams.microsoft.com, and teams.live.com.
+- Popup presents the dedicated "Teams companion recording" mode and Teams-specific guidance.
+- TabVault capture requests only the selected tab media stream; no browser microphone/camera media permission is requested.
+- Teams detection was runtime verified earlier on 2026-10-06 when teams.cloud.microsoft was corrected and re-tested.
+- DEV-008 complete.
+
 ### DEV-009 — Companion Recording Mode
-**Status:** Not started
+**Status:** Implemented — browser runtime verification pending
 
 Acceptance criteria:
 - Explain the recommended dual-client workflow.
 - Provide checks for browser mic muted and camera off where detectable.
 - Capture browser meeting tab independently from Teams desktop interaction.
 - Evaluate whether tab audio can be captured while local playback is suppressed without disrupting recording.
+
+Evidence:
+- Teams popup now explains the recommended dual-client workflow: Teams desktop for interaction, browser meeting as the passive TabVault source.
+- A passive Teams inspector checks visible meeting controls for microphone/camera state without changing either control.
+- If Teams UI state cannot be identified reliably, TabVault shows "Check manually" rather than guessing.
+- Teams local speaker playback defaults muted while the captured tab audio track remains in the recording stream.
+- Prior runtime verification already confirmed muted local speaker output does not remove captured audio.
+- Browser runtime verification of the new mic/camera readiness display is pending.
 
 ### DEV-010 — Chunked persistence
 **Status:** Not started
