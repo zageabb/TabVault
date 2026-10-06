@@ -99,6 +99,7 @@ async function createPersistedSession(meta, mimeType) {
   const session = {
     sessionId,
     title: meta.title || "TabVault recording",
+    sourceType: meta.sourceType || "generic",
     startedAt: meta.startedAt || Date.now(),
     mimeType,
     status: "recording",
@@ -563,6 +564,7 @@ async function startStream(streamId, tabId, meta = {}, playbackEnabled = true) {
   const localPlayback = await startLocalAudioPassthrough(captureStream);
   const recorder = await startMediaRecorder(captureStream, {
     title: meta.title,
+    sourceType: meta.sourceType,
     startedAt: meta.startedAt || Date.now()
   });
 
