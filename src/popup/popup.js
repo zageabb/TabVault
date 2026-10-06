@@ -34,6 +34,35 @@ function classifySource(url = "") {
 let activeTab = null;
 let activeSource = null;
 let currentRecording = null;
+let elapsedTimer = null;
+
+function formatElapsed(startedAt) {
+  const elapsedMs = Math.max(0, Date.now() - Number(startedAt || Date.now()));
+  const totalSeconds = Math.floor(elapsedMs / 1000);
+  const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
+  const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
+  const seconds = String(totalSeconds % 60).padStart(2, "0");
+  return `${hours}:${minutes}:${seconds}`;
+}
+
+function stopElapsedTimer() {
+  if (elapsedTimer) {
+    clearInterval(elapsedTimer);
+    elapsedTimer = null;
+  }
+}
+
+function startElapsedTimer(recording) {
+  stopElapsedTimer();
+  const elapsed = document.getElementById("elapsedTime");
+
+  const refresh = () => {
+    elapsed.textContent = formatElapsed(recording.startedAt);
+  };
+
+  refresh();
+  elapsedTimer = setInterval(refresh, 1000);
+}
 
 function setError(message = "") {
   const node = document.getElementById("errorMessage");
@@ -50,6 +79,7 @@ function renderRecordingState(recording) {
   const details = document.getElementById("captureDetails");
   const captureTitle = document.getElementById("captureTitle");
   const captureHint = document.getElementById("captureHint");
+  const elapsedTime = document.getElementById("elapsedTime");
 
   const capturing = recording?.status === "capturing";
   currentRecording = recording || null;
@@ -75,6 +105,7 @@ function renderRecordingState(recording) {
 
   if (capturing) {
     captureTitle.textContent = recording.title || "Untitled tab";
+    startElapsedTimer(recording);
     const sourceHint =
       recording.tabId === activeTab?.id
         ? "This tab is the active capture source."
@@ -89,6 +120,8 @@ function renderRecordingState(recording) {
 
     captureHint.textContent = sourceHint + audioHint;
   } else {
+    stopElapsedTimer();
+    elapsedTime.textContent = "00:00:00";
     captureTitle.textContent = "";
     captureHint.textContent = "";
   }
@@ -224,3 +257,6 @@ init().catch((error) => {
   document.getElementById("recordButton").disabled = true;
   setError(error.message);
 });
+
+
+window.addEventListener("unload", stopElapsedTimer);
