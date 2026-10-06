@@ -45,7 +45,7 @@ Primary supported use cases:
 ## Development Order
 
 ### DEV-001 — Extension shell
-**Status:** In progress
+**Status:** Implemented — browser runtime verification pending
 
 Acceptance criteria:
 - Manifest V3 extension loads successfully.
@@ -55,7 +55,11 @@ Acceptance criteria:
 - No broad host permissions are required just to load the extension.
 
 Evidence:
-- Pending implementation and validation.
+- `manifest.json` defines a Manifest V3 extension with popup and module service worker.
+- Popup identifies the active tab and classifies Teams, SharePoint/Stream, or Generic sources.
+- Service worker initializes local extension state.
+- Initial implementation committed to `main` on 2026-10-06.
+- Runtime loading in Chrome remains to be verified before marking complete.
 
 ### DEV-002 — Tab capture
 **Status:** Not started
