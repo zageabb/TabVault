@@ -59,7 +59,9 @@ Evidence:
 - Popup identifies the active tab and classifies Teams, SharePoint/Stream, or Generic sources.
 - Service worker initializes local extension state.
 - Initial implementation committed to `main` on 2026-10-06.
-- Runtime loading in Chrome remains to be verified before marking complete.
+- Runtime loading in Chrome verified on 2026-10-06.
+- Initial runtime test exposed the current Teams host `teams.cloud.microsoft`, which was misclassified as Generic; detection was updated to support `teams.cloud.microsoft` (plus existing `teams.microsoft.com` and `teams.live.com`).
+- Revalidation of Teams classification is pending before marking DEV-001 complete.
 
 ### DEV-002 — Tab capture
 **Status:** Not started
