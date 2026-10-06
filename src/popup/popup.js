@@ -207,6 +207,7 @@ function renderRecordingState(recording) {
   const videoStatus = document.getElementById("videoStatus");
   const audioStatus = document.getElementById("audioStatus");
   const localPlayback = document.getElementById("localPlayback");
+  const clearHistoryButton = document.getElementById("clearHistoryButton");
   const sharePointOptions = document.getElementById("sharePointOptions");
   const teamsCompanion = document.getElementById("teamsCompanion");
   const teamsSpeakerState = document.getElementById("teamsSpeakerState");
@@ -312,6 +313,56 @@ function formatRecoveryDate(timestamp) {
     return new Date(timestamp).toLocaleString();
   } catch {
     return "";
+  }
+}
+
+function formatDurationMs(durationMs) {
+  if (durationMs === null || durationMs === undefined) {
+    return "Unknown duration";
+  }
+
+  const totalSeconds = Math.max(0, Math.round(Number(durationMs) / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m ${seconds}s`;
+  }
+
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s`;
+  }
+
+  return `${seconds}s`;
+}
+
+function renderHistory(history = []) {
+  const card = document.getElementById("historyCard");
+  const list = document.getElementById("historyList");
+  const entries = Array.isArray(history) ? history.slice(0, 10) : [];
+
+  list.textContent = "";
+  card.classList.toggle("hidden", entries.length === 0);
+
+  for (const entry of entries) {
+    const item = document.createElement("div");
+    item.className = "history-item";
+
+    const title = document.createElement("strong");
+    title.textContent = entry.title || "Untitled recording";
+
+    const meta = document.createElement("div");
+    meta.className = "footnote";
+    meta.textContent = [
+      formatRecoveryDate(entry.endedAt || entry.startedAt),
+      formatDurationMs(entry.durationMs),
+      entry.result === "recovered" ? "Recovered" : "Saved",
+      entry.filename || ""
+    ].filter(Boolean).join(" · ");
+
+    item.append(title, meta);
+    list.append(item);
   }
 }
 
@@ -543,6 +594,7 @@ async function init() {
 
   const state = await getState();
   renderRecordingState(state.recording);
+  renderHistory(state.history);
 
   try {
     await refreshRecoveryPanel();
@@ -558,6 +610,33 @@ async function init() {
       document.getElementById("teamsCameraState").textContent = "Check manually";
     }
   }
+
+  clearHistoryButton.addEventListener("click", async () => {
+    const confirmed = window.confirm("Clear TabVault recording history? This removes metadata only, not downloaded videos.");
+
+    if (!confirmed) {
+      return;
+    }
+
+    setError("");
+    clearHistoryButton.disabled = true;
+
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: "TABVAULT_CLEAR_HISTORY"
+      });
+
+      if (!response?.ok) {
+        throw new Error(response?.error || "Unable to clear recording history.");
+      }
+
+      renderHistory([]);
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      clearHistoryButton.disabled = false;
+    }
+  });
 
   pauseButton.addEventListener("click", async () => {
     if (!currentRecording) {
