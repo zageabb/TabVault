@@ -160,3 +160,23 @@ button.secondary {
   font-weight: 600;
   opacity: 0.8;
 }
+
+
+.recovery-item {
+  padding: 10px 0;
+  border-top: 1px solid color-mix(in srgb, CanvasText 12%, transparent);
+}
+
+.recovery-item:first-child {
+  border-top: 0;
+}
+
+.recovery-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.recovery-actions button {
+  flex: 1;
+}
