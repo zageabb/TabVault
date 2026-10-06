@@ -105,3 +105,14 @@ button:disabled {
   opacity: 0.55;
   cursor: wait;
 }
+
+
+.toggle-row {
+  align-items: center;
+  cursor: pointer;
+}
+
+.toggle-row input {
+  width: auto;
+  cursor: pointer;
+}
