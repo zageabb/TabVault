@@ -229,7 +229,7 @@ Evidence:
 - DEV-010 complete.
 
 ### DEV-011 — Interrupted recording recovery
-**Status:** Implemented — browser runtime verification pending
+**Status:** Complete
 
 Acceptance criteria:
 - Detect unfinished recording state.
@@ -244,14 +244,25 @@ Evidence:
 - Discard is explicit and requires user confirmation; TabVault never silently deletes unfinished-session chunks.
 - Browser startup clears only the stale live-capture state, not IndexedDB recovery data.
 - The recovery storage model supports multiple unfinished sessions independently, which also prepares for DEV-015.
-- Runtime verification of an intentionally interrupted recording is pending.
+- User runtime verification on 2026-10-06 confirmed an intentionally interrupted recording is detected and recovered to a playable WebM.
+- DEV-011 complete.
 
 ### DEV-012 — Recording history
-**Status:** Not started
+**Status:** Implemented — browser runtime verification pending
 
 Acceptance criteria:
 - Keep metadata only: title, time, duration, result, filename.
 - Do not duplicate video data in extension history.
+
+Evidence:
+- Recording completion now appends metadata-only entries to chrome.storage.local.
+- Stored fields include title, source type, start/end time, effective duration, result, filename, size, and whether the item was recovered.
+- Successful recovery also writes a history entry.
+- History is capped at the 50 most recent entries.
+- Popup shows the 10 most recent recordings with timestamp, duration, saved/recovered result, and filename.
+- History does not store video blobs or duplicate IndexedDB recording chunks.
+- A Clear action removes only history metadata and explicitly states that downloaded videos are unaffected.
+- Browser runtime verification is pending.
 
 ### DEV-013 — Quality profiles
 **Status:** Not started
