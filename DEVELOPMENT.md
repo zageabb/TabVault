@@ -385,6 +385,10 @@ Evidence:
 - Further runtime inspection showed the popup itself is the wrong lifecycle owner for desktop picking: Chrome closes the action popup while the sharing picker is active, so callback/UI state can disappear even though the offscreen recorder document exists.
 - Added a persistent Window / Screen controller window (v0.5.2). The main popup now opens this controller; the user clicks `Choose window / screen` there, Chrome's picker opens, and the controller remains available with explicit RECORDING state, elapsed time, Pause/Resume, and Stop and save controls.
 - The offscreen `recorder.html` seen under Inspect views is expected and intentionally invisible; it is the background recorder, not a UI page.
+- Runtime testing of v0.5.2 showed the chooser succeeded but handing the desktop stream ID to the separate offscreen renderer failed with Chrome's `Error starting tab capture`.
+- Chrome's desktop-capture stream ID is now consumed immediately inside the persistent controller that created it. Display-mode MediaRecorder/chunk persistence runs in that controller against the same TabVault IndexedDB stores; completed recordings still use the existing download/history state services, and interrupted controller closure leaves persisted chunks recoverable.
+- Service-worker display-session registration now drives the toolbar badge and main popup active-session list; pause/stop commands can be relayed back to the controller.
+- Version bumped to v0.5.3 for runtime verification.
 - Browser runtime verification of the persistent Window / Screen controller, toolbar badge, saved output, and original dropdown visibility is pending.
 
 ## Later Ideas
