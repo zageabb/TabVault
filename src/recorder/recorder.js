@@ -50,16 +50,45 @@ function sanitizeFilename(value = "TabVault recording") {
     .slice(0, 160) || "TabVault recording";
 }
 
-function buildFilename(meta = {}) {
-  const title = sanitizeFilename(meta.title || "TabVault recording");
+function sanitizeFolderPath(value = "TabVault") {
+  const parts = String(value || "TabVault")
+    .replace(/\\/g, "/")
+    .split("/")
+    .map((part) => sanitizeFilename(part))
+    .filter((part) => part && part !== "." && part !== "..");
+
+  return parts.join("/") || "TabVault";
+}
+
+function renderFilenameTemplate(meta = {}) {
   const started = new Date(meta.startedAt || Date.now());
-  const stamp = [
+  const date = [
     started.getFullYear(),
     String(started.getMonth() + 1).padStart(2, "0"),
     String(started.getDate()).padStart(2, "0")
   ].join("-");
+  const time = [
+    String(started.getHours()).padStart(2, "0"),
+    String(started.getMinutes()).padStart(2, "0"),
+    String(started.getSeconds()).padStart(2, "0")
+  ].join("-");
 
-  return `${title} - ${stamp}.webm`;
+  const replacements = {
+    title: sanitizeFilename(meta.title || "TabVault recording"),
+    date,
+    time,
+    source: sanitizeFilename(meta.sourceType || "generic")
+  };
+
+  const template = String(meta.filenameTemplate || "{title} - {date}");
+  const rendered = template.replace(/\{(title|date|time|source)\}/g, (_match, key) => replacements[key]);
+  return sanitizeFilename(rendered) || replacements.title;
+}
+
+function buildFilename(meta = {}) {
+  const folder = sanitizeFolderPath(meta.destinationFolder || "TabVault");
+  const base = renderFilenameTemplate(meta);
+  return `${folder}/${base}.webm`;
 }
 
 function openRecordingDb() {
@@ -119,6 +148,8 @@ async function createPersistedSession(meta, mimeType) {
     sessionId,
     title: meta.title || "TabVault recording",
     sourceType: meta.sourceType || "generic",
+    filenameTemplate: meta.filenameTemplate || "{title} - {date}",
+    destinationFolder: meta.destinationFolder || "TabVault",
     startedAt: meta.startedAt || Date.now(),
     mimeType,
     status: "recording",
@@ -237,6 +268,9 @@ async function recoverPersistedSession(sessionId) {
   const blob = new Blob(chunks, { type: mimeType });
   const filename = buildFilename({
     title: session.title || "Recovered TabVault recording",
+    sourceType: session.sourceType || "generic",
+    filenameTemplate: session.filenameTemplate || "{title} - {date}",
+    destinationFolder: session.destinationFolder || "TabVault",
     startedAt: session.startedAt || Date.now()
   });
 
@@ -244,7 +278,7 @@ async function recoverPersistedSession(sessionId) {
     throw new Error("Recovered recording is empty.");
   }
 
-  downloadBlob(blob, filename);
+  await downloadBlob(blob, filename);
 
   await deletePersistedSession(sessionId);
 
@@ -387,17 +421,25 @@ async function setLocalPlayback(enabled) {
   return { localPlayback: false };
 }
 
-function downloadBlob(blob, filename) {
+async function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.style.display = "none";
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
 
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: "TABVAULT_DOWNLOAD_BLOB",
+      blobUrl: url,
+      filename,
+      target: "service-worker"
+    });
+
+    if (!response?.ok) {
+      throw new Error(response?.error || "Browser download could not be started.");
+    }
+
+    return response.downloadId || null;
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
 }
 
 function resetRecorderState() {
@@ -436,7 +478,7 @@ function stopMediaRecorder({ save = true } = {}) {
         const filename = buildFilename(meta);
 
         if (save && blob.size > 0) {
-          downloadBlob(blob, filename);
+          await downloadBlob(blob, filename);
         }
 
         const info = {
@@ -599,6 +641,8 @@ async function startStream(streamId, tabId, meta = {}, playbackEnabled = true) {
     title: meta.title,
     sourceType: meta.sourceType,
     qualityProfile: meta.qualityProfile,
+    filenameTemplate: meta.filenameTemplate,
+    destinationFolder: meta.destinationFolder,
     startedAt: meta.startedAt || Date.now()
   });
 
