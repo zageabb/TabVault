@@ -539,8 +539,9 @@ function renderCurrentTabState() {
     recordings.find((recording) => recording.tabId === activeTab?.id) || null;
 
   status.textContent = recordings.length
-    ? `${recordings.length} active`
+    ? `Recording (${recordings.length})`
     : "Idle";
+  status.classList.toggle("has-recordings", recordings.length > 0);
 
   const active = Boolean(currentRecording);
   const paused = currentRecording?.status === "paused";
