@@ -271,3 +271,22 @@ button.secondary {
   min-width: 130px;
   padding: 4px 6px;
 }
+
+
+.primary-controls {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  padding: 10px 0 2px;
+  background: Canvas;
+  border-top: 1px solid color-mix(in srgb, CanvasText 12%, transparent);
+}
+
+#activeRecordingsCard {
+  border-width: 2px;
+}
+
+.status.has-recordings {
+  font-weight: 800;
+  opacity: 1;
+}
