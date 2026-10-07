@@ -173,6 +173,8 @@ Evidence:
 - If follow-playback is enabled while the source video is initially paused, MediaRecorder is paused until playback begins.
 - Lifecycle observation is best-effort and recording continues normally if the page structure prevents video inspection.
 - User runtime verification on 2026-10-06 confirmed follow-playback pause/resume and automatic stop/save at video end.
+- A later extension-reload regression exposed stale SharePoint content scripts raising `Extension context invalidated`; the observer now tears itself down cleanly when its extension context is invalidated.
+- User runtime verification on 2026-10-07 confirmed the invalidated content-script error no longer recurs after reload/refresh.
 - DEV-007 complete.
 
 ### DEV-008 — Teams detection
