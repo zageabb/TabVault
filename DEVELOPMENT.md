@@ -380,6 +380,8 @@ Evidence:
 - The chooser is now launched directly from the popup's click/user-gesture context and only the returned stream ID is passed to the service worker/offscreen recorder.
 - Runtime UX feedback showed display recording could start successfully after the picker, but the active-session controls were buried below history/settings in the popup.
 - Active recordings panel moved to the top of the popup, header now shows `Recording (N)`, and the current-tab Start/Stop/Pause control row is sticky at the bottom so stop controls remain visible.
+- Runtime feedback then indicated the revised popup changes were not appearing after extension reload, suggesting Chrome may be loading a stale or different unpacked directory.
+- Added a visible runtime build/version diagnostic in the popup and bumped the extension to v0.5.1 so the loaded source can be verified before further DEV-016 changes.
 - Browser runtime verification of the generic dropdown case and the revised status/stop UX is pending.
 
 ## Later Ideas
