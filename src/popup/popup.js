@@ -703,6 +703,9 @@ async function startCapture() {
 }
 
 async function init() {
+  const manifest = chrome.runtime.getManifest();
+  document.getElementById("buildVersion").textContent = `v${manifest.version}`;
+
   const sourceType = document.getElementById("sourceType");
   const pageTitle = document.getElementById("pageTitle");
   const pageUrl = document.getElementById("pageUrl");
