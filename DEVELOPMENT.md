@@ -350,7 +350,7 @@ Evidence:
 
 
 ### DEV-016 — Window / screen capture mode
-**Status:** Implemented — browser runtime verification pending
+**Status:** Complete
 
 **Rationale / sequencing:**
 - Generic tab capture can miss transient browser/native compositor UI such as native select dropdowns, context menus, date pickers, and some browser-level overlays.
@@ -389,7 +389,8 @@ Evidence:
 - Chrome's desktop-capture stream ID is now consumed immediately inside the persistent controller that created it. Display-mode MediaRecorder/chunk persistence runs in that controller against the same TabVault IndexedDB stores; completed recordings still use the existing download/history state services, and interrupted controller closure leaves persisted chunks recoverable.
 - Service-worker display-session registration now drives the toolbar badge and main popup active-session list; pause/stop commands can be relayed back to the controller.
 - Version bumped to v0.5.3 for runtime verification.
-- Browser runtime verification of the persistent Window / Screen controller, toolbar badge, saved output, and original dropdown visibility is pending.
+- User runtime verification on 2026-10-07 confirmed the persistent Window / Screen controller starts successfully, remains visible, shows recording state and controls, updates the toolbar/main popup, saves output correctly, and resolves the original native-dropdown capture case.
+- DEV-016 complete.
 
 ## Later Ideas
 
