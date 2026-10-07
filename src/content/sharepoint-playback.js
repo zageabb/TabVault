@@ -7,19 +7,58 @@
 
   let observedVideo = null;
   let cleanup = null;
+  let observer = null;
+  let runtimeAvailable = true;
+
+  function teardown() {
+    runtimeAvailable = false;
+
+    if (cleanup) {
+      cleanup();
+      cleanup = null;
+    }
+
+    if (observer) {
+      observer.disconnect();
+      observer = null;
+    }
+  }
 
   function send(event, video) {
-    chrome.runtime.sendMessage({
-      type: "TABVAULT_SHAREPOINT_MEDIA_EVENT",
-      event,
-      media: {
-        currentTime: Number(video?.currentTime || 0),
-        duration: Number.isFinite(video?.duration) ? video.duration : null,
-        paused: Boolean(video?.paused),
-        ended: Boolean(video?.ended),
-        readyState: Number(video?.readyState || 0)
+    if (!runtimeAvailable) {
+      return;
+    }
+
+    try {
+      if (!chrome?.runtime?.id) {
+        teardown();
+        return;
       }
-    }).catch(() => {});
+
+      const pending = chrome.runtime.sendMessage({
+        type: "TABVAULT_SHAREPOINT_MEDIA_EVENT",
+        event,
+        media: {
+          currentTime: Number(video?.currentTime || 0),
+          duration: Number.isFinite(video?.duration) ? video.duration : null,
+          paused: Boolean(video?.paused),
+          ended: Boolean(video?.ended),
+          readyState: Number(video?.readyState || 0)
+        }
+      });
+
+      if (pending && typeof pending.catch === "function") {
+        pending.catch(() => {
+          // Extension reloads invalidate previously injected content-script
+          // contexts. Stop this stale observer rather than surfacing an error.
+          teardown();
+        });
+      }
+    } catch {
+      // chrome.runtime.sendMessage can throw synchronously after the extension
+      // is reloaded and the old injected context has been invalidated.
+      teardown();
+    }
   }
 
   function attach(video) {
@@ -74,16 +113,17 @@
 
   scan();
 
-  const observer = new MutationObserver(scan);
+  observer = new MutationObserver(scan);
   observer.observe(document.documentElement, {
     childList: true,
     subtree: true
   });
 
-  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (message?.type !== "TABVAULT_GET_MEDIA_STATE") {
-      return false;
-    }
+  try {
+    chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+      if (message?.type !== "TABVAULT_GET_MEDIA_STATE") {
+        return false;
+      }
 
     scan();
 
@@ -103,6 +143,9 @@
       }
     });
 
-    return false;
-  });
+      return false;
+    });
+  } catch {
+    teardown();
+  }
 })();
