@@ -112,6 +112,7 @@ async function appendHistory(entry) {
     id: entry.id || crypto.randomUUID(),
     title: entry.title || "Untitled recording",
     sourceType: entry.sourceType || SOURCE_TYPES.GENERIC,
+    captureMode: entry.captureMode || "tab",
     startedAt: entry.startedAt || null,
     endedAt: entry.endedAt || Date.now(),
     durationMs: entry.durationMs ?? null,
@@ -279,6 +280,29 @@ async function removeRecording(sessionId) {
   await writeState({ recordings });
 }
 
+function chooseDesktopSource() {
+  return new Promise((resolve, reject) => {
+    try {
+      chrome.desktopCapture.chooseDesktopMedia(
+        ["window", "screen", "audio"],
+        (streamId, options = {}) => {
+          if (!streamId) {
+            reject(new Error("Window / screen selection was cancelled."));
+            return;
+          }
+
+          resolve({
+            streamId,
+            canRequestAudioTrack: Boolean(options.canRequestAudioTrack)
+          });
+        }
+      );
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
 async function startCapture(message) {
   const current = await readState();
 
@@ -299,9 +323,23 @@ async function startCapture(message) {
   await ensureOffscreenDocument();
 
   const sessionId = crypto.randomUUID();
-  const streamId = await chrome.tabCapture.getMediaStreamId({
-    targetTabId: message.tabId
-  });
+  const captureMode =
+    message.captureMode === "display" && message.sourceType === SOURCE_TYPES.GENERIC
+      ? "display"
+      : "tab";
+
+  let streamId;
+  let canRequestAudioTrack = true;
+
+  if (captureMode === "display") {
+    const desktop = await chooseDesktopSource();
+    streamId = desktop.streamId;
+    canRequestAudioTrack = desktop.canRequestAudioTrack;
+  } else {
+    streamId = await chrome.tabCapture.getMediaStreamId({
+      targetTabId: message.tabId
+    });
+  }
 
   const startedAt = Date.now();
   const localPlaybackEnabled =
@@ -323,9 +361,12 @@ async function startCapture(message) {
     streamId,
     tabId: message.tabId,
     localPlaybackEnabled,
+    captureMode,
+    canRequestAudioTrack,
     meta: {
       title: message.title || "Untitled tab",
       sourceType: message.sourceType || SOURCE_TYPES.GENERIC,
+      captureMode,
       qualityProfile: message.qualityProfile || "standard",
       filenameTemplate:
         message.filenameTemplate ||
@@ -350,6 +391,7 @@ async function startCapture(message) {
     title: message.title || "Untitled tab",
     url: message.url || "",
     sourceType: message.sourceType || SOURCE_TYPES.GENERIC,
+    captureMode,
     startedAt,
     totalPausedMs: 0,
     pausedAt: null,
@@ -373,6 +415,7 @@ async function startCapture(message) {
   await writeState({ recordings: [...current.recordings, recording] });
 
   if (
+    recording.captureMode === "tab" &&
     recording.sourceType === SOURCE_TYPES.SHAREPOINT &&
     recording.lifecycle.followPlayback
   ) {
@@ -406,6 +449,7 @@ async function stopCapture(sessionId) {
     await appendHistory({
       title: active.title,
       sourceType: active.sourceType,
+      captureMode: active.captureMode,
       startedAt: active.startedAt,
       endedAt,
       durationMs: recordingDurationMs(active, endedAt),
@@ -702,6 +746,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         await appendHistory({
           title: active.title,
           sourceType: active.sourceType,
+          captureMode: active.captureMode,
           startedAt: active.startedAt,
           endedAt,
           durationMs: recordingDurationMs(active, endedAt),
