@@ -378,7 +378,9 @@ Evidence:
 - Parallel session handling remains available, so display capture can coexist with other active TabVault sessions subject to the three-session cap.
 - Initial runtime test showed Chrome immediately cancelling the desktop-media chooser when it was launched indirectly from the service worker.
 - The chooser is now launched directly from the popup's click/user-gesture context and only the returned stream ID is passed to the service worker/offscreen recorder.
-- Browser runtime verification of the generic dropdown case and audio/no-audio surface behaviour is pending.
+- Runtime UX feedback showed display recording could start successfully after the picker, but the active-session controls were buried below history/settings in the popup.
+- Active recordings panel moved to the top of the popup, header now shows `Recording (N)`, and the current-tab Start/Stop/Pause control row is sticky at the bottom so stop controls remain visible.
+- Browser runtime verification of the generic dropdown case and the revised status/stop UX is pending.
 
 ## Later Ideas
 
