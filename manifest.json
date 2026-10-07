@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TabVault",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "minimum_chrome_version": "116",
   "description": "Local-first browser tab recording for SharePoint, Teams, and generic tabs.",
   "permissions": [
@@ -10,7 +10,8 @@
     "tabCapture",
     "offscreen",
     "scripting",
-    "downloads"
+    "downloads",
+    "desktopCapture"
   ],
   "action": {
     "default_title": "TabVault",
