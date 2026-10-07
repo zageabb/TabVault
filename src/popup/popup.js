@@ -439,7 +439,8 @@ function renderActiveRecordings() {
     elapsed.textContent = formatElapsed(recording);
 
     const state = document.createElement("span");
-    state.textContent = ` · ${recording.status} · ${recording.sourceType}`;
+    const captureLabel = recording.captureMode === "display" ? "window/screen" : recording.sourceType;
+    state.textContent = ` · ${recording.status} · ${captureLabel}`;
 
     meta.append(elapsed, state);
 
@@ -523,6 +524,9 @@ function renderCurrentTabState() {
   const audioStatus = document.getElementById("audioStatus");
   const localPlayback = document.getElementById("localPlayback");
   const qualityProfile = document.getElementById("qualityProfile");
+  const captureMode = document.getElementById("captureMode");
+  const captureModeRow = document.getElementById("captureModeRow");
+  const captureModeHint = document.getElementById("captureModeHint");
   const details = document.getElementById("captureDetails");
   const elapsed = document.getElementById("elapsedTime");
   const captureTitle = document.getElementById("captureTitle");
@@ -541,8 +545,14 @@ function renderCurrentTabState() {
   const active = Boolean(currentRecording);
   const paused = currentRecording?.status === "paused";
   const errored = currentRecording?.status === "error";
+  const genericSource = activeSource?.type === "generic";
 
-  recordButton.textContent = active ? "Stop this tab" : "Start this tab";
+  captureModeRow.classList.toggle("hidden", !genericSource);
+  captureModeHint.classList.toggle("hidden", !genericSource || captureMode.value !== "display");
+
+  recordButton.textContent = active
+    ? (currentRecording.captureMode === "display" ? "Stop window / screen" : "Stop this tab")
+    : (genericSource && captureMode.value === "display" ? "Start window / screen" : "Start this tab");
   recordButton.dataset.action = active ? "stop" : "start";
   recordButton.disabled = !active && recordings.length >= MAX_CONCURRENT_RECORDINGS;
 
@@ -561,9 +571,12 @@ function renderCurrentTabState() {
     localPlayback.checked = Boolean(currentRecording.localPlaybackEnabled);
     qualityProfile.value = currentRecording.qualityProfile || "standard";
     qualityProfile.disabled = true;
+    captureMode.value = currentRecording.captureMode || "tab";
+    captureMode.disabled = true;
   } else {
     localPlayback.checked = activeSource?.type !== "teams";
     qualityProfile.disabled = false;
+    captureMode.disabled = !genericSource;
   }
 
   localPlayback.disabled = false;
@@ -587,11 +600,17 @@ function renderCurrentTabState() {
         ? ` ${currentRecording.error || "Recording encountered an error."}`
         : "";
 
+    const sourceHint = currentRecording.captureMode === "display"
+      ? "Window / Screen capture is active. "
+      : "This tab is one active capture source. ";
+
     captureHint.textContent =
-      "This tab is one active capture source. " +
+      sourceHint +
       (currentRecording.audio?.available
-        ? "Tab audio is being captured."
-        : "No tab audio track is currently available.") +
+        ? "Audio is being captured."
+        : currentRecording.captureMode === "display"
+          ? "The selected surface did not provide an audio track."
+          : "No tab audio track is currently available.") +
       stateHint;
   } else {
     captureTitle.textContent = "";
@@ -626,6 +645,9 @@ async function startCapture() {
     title: activeSource.title || activeTab.title,
     url: activeTab.url,
     sourceType: activeSource.type,
+    captureMode: activeSource.type === "generic"
+      ? document.getElementById("captureMode").value
+      : "tab",
     qualityProfile: document.getElementById("qualityProfile").value,
     destinationFolder: document.getElementById("destinationFolder").value,
     filenameTemplate: document.getElementById("filenameTemplate").value,
@@ -650,6 +672,9 @@ async function init() {
   const recordButton = document.getElementById("recordButton");
   const pauseButton = document.getElementById("pauseButton");
   const localPlayback = document.getElementById("localPlayback");
+  const captureMode = document.getElementById("captureMode");
+  const captureModeRow = document.getElementById("captureModeRow");
+  const captureModeHint = document.getElementById("captureModeHint");
   const destinationFolder = document.getElementById("destinationFolder");
   const filenameTemplate = document.getElementById("filenameTemplate");
   const clearHistoryButton = document.getElementById("clearHistoryButton");
@@ -669,6 +694,11 @@ async function init() {
   pageUrl.textContent = activeTab?.url || "URL unavailable";
   sourceHint.textContent = activeSource.hint || "";
   sourceHint.classList.toggle("hidden", !activeSource.hint);
+
+  const genericSource = activeSource.type === "generic";
+  captureModeRow.classList.toggle("hidden", !genericSource);
+  captureMode.disabled = !genericSource;
+  captureModeHint.classList.toggle("hidden", true);
 
   const state = await getState();
   destinationFolder.value = state.settings?.destinationFolder || "TabVault";
@@ -768,6 +798,14 @@ async function init() {
     } finally {
       pauseButton.disabled = false;
     }
+  });
+
+  captureMode.addEventListener("change", () => {
+    captureModeHint.classList.toggle(
+      "hidden",
+      activeSource.type !== "generic" || captureMode.value !== "display"
+    );
+    renderCurrentTabState();
   });
 
   localPlayback.addEventListener("change", async () => {
