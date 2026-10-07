@@ -393,11 +393,11 @@ Evidence:
 - DEV-016 complete.
 
 ### DEV-017 — Seekable long WebM finalisation
-**Status:** In progress
+**Status:** Implemented — runtime validation pending
 
 **Problem:**
 - Long recordings contain the later media data and continue playing beyond the apparent end, but the browser seek bar may expose only the first ~30–40 seconds.
-- The current finaliser concatenates persisted MediaRecorder chunks into a Blob without repairing WebM duration metadata.
+- The previous finaliser concatenated persisted MediaRecorder chunks into a Blob without repairing WebM duration metadata.
 
 **Acceptance criteria:**
 - Preserve 5-second IndexedDB chunk persistence and interrupted-recording recovery.
@@ -406,6 +406,17 @@ Evidence:
 - Paused time must not be counted in normal completed-recording duration metadata.
 - If a WebM cannot be parsed safely, preserve the original recording rather than failing or corrupting it.
 - Add automated coverage for duration insertion/replacement and non-WebM/fallback safety.
+
+**Implementation evidence:**
+- Added `src/shared/webm-duration.js`, a dependency-free EBML/WebM finalisation helper that inserts or replaces the Info/Duration element while preserving the existing media clusters.
+- Normal tab/offscreen finalisation now calculates effective duration excluding pauses and repairs the assembled WebM before download.
+- Window / Screen finalisation uses the same repair and its service-worker-maintained pause timing.
+- Interrupted-session recovery repairs duration using the best available persisted session timing before download.
+- Repair is fail-safe: malformed/non-WebM input is returned unchanged rather than risking recording loss.
+- Added `tests/webm-duration.test.js` covering missing-duration insertion, incorrect-duration replacement, and non-WebM fallback; CI executes the regression test.
+- Extension version bumped to v0.5.4.
+- GitHub Actions run 37610534011 passed on commit c4b6a1e3757c1dcd0495c0768596ad01e3ebc658.
+- Remaining validation: record a multi-minute/long video in Chrome and confirm the saved player's seek bar exposes the full duration and can jump forward before playback reaches that point.
 
 ## Later Ideas
 
