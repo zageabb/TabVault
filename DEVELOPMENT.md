@@ -382,7 +382,10 @@ Evidence:
 - Active recordings panel moved to the top of the popup, header now shows `Recording (N)`, and the current-tab Start/Stop/Pause control row is sticky at the bottom so stop controls remain visible.
 - Runtime feedback then indicated the revised popup changes were not appearing after extension reload, suggesting Chrome may be loading a stale or different unpacked directory.
 - Added a visible runtime build/version diagnostic in the popup and bumped the extension to v0.5.1 so the loaded source can be verified before further DEV-016 changes.
-- Browser runtime verification of the generic dropdown case and the revised status/stop UX is pending.
+- Further runtime inspection showed the popup itself is the wrong lifecycle owner for desktop picking: Chrome closes the action popup while the sharing picker is active, so callback/UI state can disappear even though the offscreen recorder document exists.
+- Added a persistent Window / Screen controller window (v0.5.2). The main popup now opens this controller; the user clicks `Choose window / screen` there, Chrome's picker opens, and the controller remains available with explicit RECORDING state, elapsed time, Pause/Resume, and Stop and save controls.
+- The offscreen `recorder.html` seen under Inspect views is expected and intentionally invisible; it is the background recorder, not a UI page.
+- Browser runtime verification of the persistent Window / Screen controller, toolbar badge, saved output, and original dropdown visibility is pending.
 
 ## Later Ideas
 
