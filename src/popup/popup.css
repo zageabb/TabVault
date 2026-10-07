@@ -290,3 +290,11 @@ button.secondary {
   font-weight: 800;
   opacity: 1;
 }
+
+
+.build-version {
+  margin-top: 2px;
+  font-size: 11px;
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
