@@ -265,3 +265,9 @@ button.secondary {
   margin-top: 7px;
   font-size: 12px;
 }
+
+
+#captureMode {
+  min-width: 130px;
+  padding: 4px 6px;
+}
