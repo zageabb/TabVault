@@ -308,7 +308,7 @@ Evidence:
 
 
 ### DEV-015 — Parallel recording sessions
-**Status:** Implemented — browser runtime verification pending
+**Status:** Complete
 
 **Rationale / sequencing:**
 - Add only after the single-session recording pipeline, chunk persistence, recovery, history, quality, and destination handling are stable.
@@ -345,11 +345,12 @@ Evidence:
 - IndexedDB chunks remain isolated by session ID; recoverable-session listing filters out sessions that are still live.
 - SharePoint playback events are routed back to the matching session by sender tab ID.
 - Recording history continues to be written independently for each completed session.
-- Browser runtime validation with two and three simultaneous tabs, independent stop order, and playable output is pending.
+- User runtime verification on 2026-10-07 confirmed two/three simultaneous tab recordings, independent pause/stop order, per-session speaker controls, playable output, and clean refusal of a fourth session.
+- DEV-015 complete.
 
 
 ### DEV-016 — Window / screen capture mode
-**Status:** Not started
+**Status:** Implemented — browser runtime verification pending
 
 **Rationale / sequencing:**
 - Generic tab capture can miss transient browser/native compositor UI such as native select dropdowns, context menus, date pickers, and some browser-level overlays.
@@ -366,6 +367,16 @@ Evidence:
 - Window / Screen recording uses the same chunk persistence, recovery, history, quality, and naming pipeline as tab recording.
 - Teams and SharePoint continue to recommend Tab capture unless the user explicitly chooses otherwise.
 - Runtime validation includes the reported generic-app dropdown case.
+
+Evidence:
+- Added the Chrome desktopCapture permission and a Generic-only Capture source selector.
+- Generic recordings now offer Tab or Window / Screen; SharePoint and Teams remain on isolated Tab capture.
+- Window / Screen uses Chrome's explicit desktop-media picker with window, screen, and audio choices, so TabVault never silently chooses a surface.
+- The selected desktop stream is consumed in the offscreen recorder with chromeMediaSource=desktop, preserving popup-independent recording lifetime.
+- Display recordings reuse the same per-session MediaRecorder, quality profile, IndexedDB chunk persistence, recovery, history, and destination/naming pipeline.
+- Audio is requested only when Chrome reports the chosen surface can supply an audio track; the popup reports unavailable audio rather than failing the recording.
+- Parallel session handling remains available, so display capture can coexist with other active TabVault sessions subject to the three-session cap.
+- Browser runtime verification of the generic dropdown case and audio/no-audio surface behaviour is pending.
 
 ## Later Ideas
 
