@@ -376,6 +376,8 @@ Evidence:
 - Display recordings reuse the same per-session MediaRecorder, quality profile, IndexedDB chunk persistence, recovery, history, and destination/naming pipeline.
 - Audio is requested only when Chrome reports the chosen surface can supply an audio track; the popup reports unavailable audio rather than failing the recording.
 - Parallel session handling remains available, so display capture can coexist with other active TabVault sessions subject to the three-session cap.
+- Initial runtime test showed Chrome immediately cancelling the desktop-media chooser when it was launched indirectly from the service worker.
+- The chooser is now launched directly from the popup's click/user-gesture context and only the returned stream ID is passed to the service worker/offscreen recorder.
 - Browser runtime verification of the generic dropdown case and audio/no-audio surface behaviour is pending.
 
 ## Later Ideas
