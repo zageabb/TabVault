@@ -139,6 +139,7 @@ async function createPersistedSession(sessionId, meta, mimeType) {
     title: meta.title || "TabVault recording",
     sourceType: meta.sourceType || "generic",
     qualityProfile: meta.qualityProfile || "standard",
+    captureMode: meta.captureMode || "tab",
     filenameTemplate: meta.filenameTemplate || "{title} - {date}",
     destinationFolder: meta.destinationFolder || "TabVault",
     startedAt: meta.startedAt || Date.now(),
@@ -540,26 +541,33 @@ async function startSession({
   streamId,
   tabId,
   meta = {},
-  localPlaybackEnabled = true
+  localPlaybackEnabled = true,
+  captureMode = "tab",
+  canRequestAudioTrack = true
 }) {
   if (!sessionId) throw new Error("A recording session ID is required.");
   if (activeSessions.has(sessionId)) {
     throw new Error("Recording session is already active.");
   }
 
+  const chromeMediaSource = captureMode === "display" ? "desktop" : "tab";
+  const audioConstraint = canRequestAudioTrack
+    ? {
+        mandatory: {
+          chromeMediaSource,
+          chromeMediaSourceId: streamId
+        }
+      }
+    : false;
+
   const stream = await navigator.mediaDevices.getUserMedia({
     video: {
       mandatory: {
-        chromeMediaSource: "tab",
+        chromeMediaSource,
         chromeMediaSourceId: streamId
       }
     },
-    audio: {
-      mandatory: {
-        chromeMediaSource: "tab",
-        chromeMediaSourceId: streamId
-      }
-    }
+    audio: audioConstraint
   });
 
   const videoTrack = stream.getVideoTracks()[0];
@@ -580,6 +588,7 @@ async function startSession({
     localPlaybackEnabled: Boolean(localPlaybackEnabled),
     meta: {
       ...meta,
+      captureMode,
       startedAt: meta.startedAt || Date.now()
     }
   };
@@ -627,7 +636,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       streamId: message.streamId,
       tabId: message.tabId,
       meta: message.meta,
-      localPlaybackEnabled: message.localPlaybackEnabled
+      localPlaybackEnabled: message.localPlaybackEnabled,
+      captureMode: message.captureMode || "tab",
+      canRequestAudioTrack: message.canRequestAudioTrack !== false
     })
       .then((media) => sendResponse({ ok: true, ...media }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
