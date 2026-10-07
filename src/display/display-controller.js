@@ -514,11 +514,25 @@ async function finalizeRecorder() {
         await markSessionFinalizing(recording.sessionId);
         const chunks = await readPersistedChunks(recording.sessionId);
         const mimeType = mediaRecorder.mimeType || chooseMimeType() || "video/webm";
-        const blob = new Blob(chunks, { type: mimeType });
+        const rawBlob = new Blob(chunks, { type: mimeType });
 
-        if (blob.size <= 0) {
+        if (rawBlob.size <= 0) {
           throw new Error("The display recording contained no media data.");
         }
+
+        const endedAt = Date.now();
+        let pausedMs = Number(recording.totalPausedMs || 0);
+        if (recording.status === "paused" && recording.pausedAt) {
+          pausedMs += Math.max(0, endedAt - Number(recording.pausedAt));
+        }
+        const durationMs = Math.max(
+          1,
+          endedAt - Number(recording.startedAt || endedAt) - pausedMs
+        );
+        const blob = await globalThis.TabVaultWebm.repairWebmDuration(
+          rawBlob,
+          durationMs
+        );
 
         const filename = buildFilename(recording);
         await downloadBlob(blob, filename);
