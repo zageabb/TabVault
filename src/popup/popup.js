@@ -207,6 +207,7 @@ function renderRecordingState(recording) {
   const videoStatus = document.getElementById("videoStatus");
   const audioStatus = document.getElementById("audioStatus");
   const localPlayback = document.getElementById("localPlayback");
+  const qualityProfile = document.getElementById("qualityProfile");
   const sharePointOptions = document.getElementById("sharePointOptions");
   const teamsCompanion = document.getElementById("teamsCompanion");
   const teamsSpeakerState = document.getElementById("teamsSpeakerState");
@@ -241,9 +242,12 @@ function renderRecordingState(recording) {
   if (active) {
     localPlayback.checked = Boolean(recording.localPlaybackEnabled);
     localPlayback.disabled = false;
+    qualityProfile.value = recording.qualityProfile || "standard";
+    qualityProfile.disabled = true;
   } else {
     localPlayback.checked = activeSource?.type !== "teams";
     localPlayback.disabled = false;
+    qualityProfile.disabled = false;
   }
 
   sharePointOptions.classList.toggle("hidden", activeSource?.type !== "sharepoint");
@@ -499,6 +503,7 @@ async function startCapture() {
     title: activeSource.title || activeTab.title,
     url: activeTab.url,
     sourceType: activeSource.type,
+    qualityProfile: document.getElementById("qualityProfile").value,
     localPlaybackEnabled: document.getElementById("localPlayback").checked,
     autoStopOnEnded: document.getElementById("autoStopOnEnded")?.checked ?? false,
     followPlayback: document.getElementById("followPlayback")?.checked ?? false
@@ -568,6 +573,7 @@ async function init() {
   const recordButton = document.getElementById("recordButton");
   const pauseButton = document.getElementById("pauseButton");
   const localPlayback = document.getElementById("localPlayback");
+  const qualityProfile = document.getElementById("qualityProfile");
   const clearHistoryButton = document.getElementById("clearHistoryButton");
 
   [activeTab] = await chrome.tabs.query({
