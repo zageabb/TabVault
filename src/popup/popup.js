@@ -1,33 +1,26 @@
 function decodeSharePointTitle(parsed, fallbackTitle = "") {
   const candidates = [];
 
-  const id = parsed.searchParams.get("id");
-  if (id) {
+  for (const key of ["id", "file"]) {
+    const value = parsed.searchParams.get(key);
+    if (!value) continue;
     try {
-      candidates.push(decodeURIComponent(id));
+      candidates.push(decodeURIComponent(value));
     } catch {
-      candidates.push(id);
-    }
-  }
-
-  const file = parsed.searchParams.get("file");
-  if (file) {
-    try {
-      candidates.push(decodeURIComponent(file));
-    } catch {
-      candidates.push(file);
+      candidates.push(value);
     }
   }
 
   candidates.push(parsed.pathname);
 
   for (const candidate of candidates) {
-    const normalized = String(candidate || "").replace(/\\/g, "/");
-    const filename = normalized.split("/").filter(Boolean).pop();
+    const filename = String(candidate || "")
+      .replace(/\\/g, "/")
+      .split("/")
+      .filter(Boolean)
+      .pop();
 
-    if (!filename) {
-      continue;
-    }
+    if (!filename) continue;
 
     const decoded = filename
       .replace(/%([0-9A-Fa-f]{2})/g, (match) => {
@@ -91,11 +84,9 @@ function classifySource(url = "", pageTitle = "") {
   const isSharePointHost =
     host.endsWith(".sharepoint.com") ||
     host.endsWith(".sharepoint-df.com");
-
   const isStreamPage =
     path.includes("/_layouts/15/stream.aspx") ||
     path.includes("/stream.aspx");
-
   const looksLikeRecording =
     /\/recordings?\//i.test(parsed.pathname) ||
     /meeting[%20 _-]*recording/i.test(url);
@@ -119,10 +110,19 @@ function classifySource(url = "", pageTitle = "") {
   };
 }
 
+const MAX_CONCURRENT_RECORDINGS = 3;
+
 let activeTab = null;
 let activeSource = null;
+let recordings = [];
 let currentRecording = null;
 let elapsedTimer = null;
+
+function setError(message = "") {
+  const node = document.getElementById("errorMessage");
+  node.textContent = message;
+  node.classList.toggle("hidden", !message);
+}
 
 function formatElapsed(recording) {
   const startedAt = Number(recording?.startedAt || Date.now());
@@ -145,41 +145,72 @@ function stopElapsedTimer() {
   }
 }
 
-function startElapsedTimer(recording) {
+function startElapsedTimer() {
   stopElapsedTimer();
-  const elapsed = document.getElementById("elapsedTime");
+  elapsedTimer = setInterval(() => {
+    if (currentRecording) {
+      document.getElementById("elapsedTime").textContent = formatElapsed(currentRecording);
+    }
 
-  const refresh = () => {
-    elapsed.textContent = formatElapsed(recording);
-  };
-
-  refresh();
-  elapsedTimer = setInterval(refresh, 1000);
+    document.querySelectorAll("[data-session-elapsed]").forEach((node) => {
+      const recording = recordings.find(
+        (item) => item.sessionId === node.dataset.sessionElapsed
+      );
+      if (recording) {
+        node.textContent = formatElapsed(recording);
+      }
+    });
+  }, 1000);
 }
 
-function setError(message = "") {
-  const node = document.getElementById("errorMessage");
-  node.textContent = message;
-  node.classList.toggle("hidden", !message);
+function formatBytes(bytes = 0) {
+  const value = Number(bytes || 0);
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatDate(timestamp) {
+  try {
+    return new Date(timestamp).toLocaleString();
+  } catch {
+    return "";
+  }
+}
+
+function formatDurationMs(durationMs) {
+  if (durationMs === null || durationMs === undefined) {
+    return "Unknown duration";
+  }
+
+  const totalSeconds = Math.max(0, Math.round(Number(durationMs) / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
+}
+
+async function getState() {
+  const response = await chrome.runtime.sendMessage({ type: "TABVAULT_GET_STATE" });
+  if (!response?.ok) {
+    throw new Error(response?.error || "Unable to read TabVault state.");
+  }
+  return response.state;
 }
 
 function renderTeamsControlState(node, control) {
-  if (!node) {
-    return;
-  }
-
   if (!control?.detected) {
     node.textContent = "Check manually";
     return;
   }
-
   node.textContent = control.off ? "Off" : "On";
 }
 
 async function refreshTeamsCompanionState() {
-  if (activeSource?.type !== "teams" || !activeTab?.id) {
-    return;
-  }
+  if (activeSource?.type !== "teams" || !activeTab?.id) return;
 
   const response = await chrome.runtime.sendMessage({
     type: "TABVAULT_GET_TEAMS_STATE",
@@ -200,146 +231,6 @@ async function refreshTeamsCompanionState() {
   );
 }
 
-function renderRecordingState(recording) {
-  const status = document.getElementById("status");
-  const button = document.getElementById("recordButton");
-  const pauseButton = document.getElementById("pauseButton");
-  const videoStatus = document.getElementById("videoStatus");
-  const audioStatus = document.getElementById("audioStatus");
-  const localPlayback = document.getElementById("localPlayback");
-  const qualityProfile = document.getElementById("qualityProfile");
-  const sharePointOptions = document.getElementById("sharePointOptions");
-  const teamsCompanion = document.getElementById("teamsCompanion");
-  const teamsSpeakerState = document.getElementById("teamsSpeakerState");
-  const details = document.getElementById("captureDetails");
-  const captureTitle = document.getElementById("captureTitle");
-  const captureHint = document.getElementById("captureHint");
-  const elapsedTime = document.getElementById("elapsedTime");
-
-  const capturing = recording?.status === "capturing";
-  const paused = recording?.status === "paused";
-  const errored = recording?.status === "error";
-  const active = capturing || paused;
-  currentRecording = recording || null;
-
-  status.textContent = capturing ? "Capturing" : paused ? "Paused" : errored ? "Error" : "Idle";
-  status.classList.toggle("recording", capturing);
-  status.classList.toggle("paused", paused);
-  status.classList.toggle("errored", errored);
-
-  button.textContent = active || errored ? "Stop tab capture" : "Start tab capture";
-  button.dataset.action = active || errored ? "stop" : "start";
-
-  pauseButton.classList.toggle("hidden", !active);
-  pauseButton.textContent = paused ? "Resume" : "Pause";
-  pauseButton.dataset.action = paused ? "resume" : "pause";
-
-  videoStatus.textContent = active ? "Active" : errored ? "Error" : "Ready";
-  audioStatus.textContent = active
-    ? (recording.audio?.available ? "Active" : "Unavailable")
-    : errored ? "Error" : "Ready";
-
-  if (active) {
-    localPlayback.checked = Boolean(recording.localPlaybackEnabled);
-    localPlayback.disabled = false;
-    qualityProfile.value = recording.qualityProfile || "standard";
-    qualityProfile.disabled = true;
-  } else {
-    localPlayback.checked = activeSource?.type !== "teams";
-    localPlayback.disabled = false;
-    qualityProfile.disabled = false;
-  }
-
-  sharePointOptions.classList.toggle("hidden", activeSource?.type !== "sharepoint");
-  teamsCompanion.classList.toggle("hidden", activeSource?.type !== "teams");
-
-  if (activeSource?.type === "teams") {
-    const speakerMuted = active
-      ? !Boolean(recording.localPlaybackEnabled)
-      : !Boolean(localPlayback.checked);
-    teamsSpeakerState.textContent = speakerMuted ? "Muted" : "On";
-  }
-
-  details.classList.toggle("hidden", !active && !errored);
-
-  if (active || errored) {
-    captureTitle.textContent = recording.title || "Untitled tab";
-    if (errored) {
-      stopElapsedTimer();
-      elapsedTime.textContent = formatElapsed(recording);
-    } else {
-      startElapsedTimer(recording);
-    }
-    const sourceHint =
-      recording.tabId === activeTab?.id
-        ? "This tab is the active capture source."
-        : "Capture continues from the original tab while you work here.";
-
-    const audioHint = recording.audio?.available
-      ? " Tab audio is being captured; microphone is not requested." +
-        (recording.localPlaybackEnabled
-          ? " Speaker playback is on."
-          : " Speaker playback is muted while recording continues.")
-      : " No tab audio track is currently available.";
-
-    const stateHint = paused
-      ? " Recording is paused."
-      : errored
-        ? ` ${recording.error || "Recording encountered an error."}`
-        : "";
-
-    captureHint.textContent = sourceHint + audioHint + stateHint;
-  } else {
-    stopElapsedTimer();
-    elapsedTime.textContent = "00:00:00";
-    captureTitle.textContent = "";
-    captureHint.textContent = "";
-  }
-}
-
-function formatBytes(bytes = 0) {
-  const value = Number(bytes || 0);
-
-  if (value < 1024) {
-    return `${value} B`;
-  }
-
-  if (value < 1024 * 1024) {
-    return `${(value / 1024).toFixed(1)} KB`;
-  }
-
-  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function formatRecoveryDate(timestamp) {
-  try {
-    return new Date(timestamp).toLocaleString();
-  } catch {
-    return "";
-  }
-}
-
-function formatDurationMs(durationMs) {
-  if (durationMs === null || durationMs === undefined) {
-    return "Unknown duration";
-  }
-
-  const totalSeconds = Math.max(0, Math.round(Number(durationMs) / 1000));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  if (hours > 0) {
-    return `${hours}h ${minutes}m ${seconds}s`;
-  }
-
-  if (minutes > 0) {
-    return `${minutes}m ${seconds}s`;
-  }
-
-  return `${seconds}s`;
-}
-
 function renderHistory(history = []) {
   const card = document.getElementById("historyCard");
   const list = document.getElementById("historyList");
@@ -358,7 +249,7 @@ function renderHistory(history = []) {
     const meta = document.createElement("div");
     meta.className = "footnote";
     meta.textContent = [
-      formatRecoveryDate(entry.endedAt || entry.startedAt),
+      formatDate(entry.endedAt || entry.startedAt),
       formatDurationMs(entry.durationMs),
       entry.result === "recovered" ? "Recovered" : "Saved",
       entry.filename || ""
@@ -399,7 +290,7 @@ async function refreshRecoveryPanel() {
     const meta = document.createElement("div");
     meta.className = "footnote";
     meta.textContent = [
-      formatRecoveryDate(session.startedAt),
+      formatDate(session.startedAt),
       `${Number(session.chunkCount || 0)} chunks`,
       formatBytes(session.bytesPersisted)
     ].filter(Boolean).join(" · ");
@@ -421,19 +312,18 @@ async function refreshRecoveryPanel() {
       setError("");
       recoverButton.disabled = true;
       discardButton.disabled = true;
-
       try {
         const response = await chrome.runtime.sendMessage({
           type: "TABVAULT_RECOVER_SESSION",
           sessionId: session.sessionId
         });
-
         if (!response?.ok) {
           throw new Error(response?.error || "Unable to recover recording.");
         }
-
         setError(`Recovered ${response.recording?.filename || "recording"}`);
         await refreshRecoveryPanel();
+        const state = await getState();
+        renderHistory(state.history);
       } catch (error) {
         setError(error.message);
       } finally {
@@ -443,28 +333,23 @@ async function refreshRecoveryPanel() {
     });
 
     discardButton.addEventListener("click", async () => {
-      const confirmed = window.confirm(
+      if (!window.confirm(
         "Discard this recoverable recording? This permanently removes its saved chunks."
-      );
-
-      if (!confirmed) {
+      )) {
         return;
       }
 
       setError("");
       recoverButton.disabled = true;
       discardButton.disabled = true;
-
       try {
         const response = await chrome.runtime.sendMessage({
           type: "TABVAULT_DISCARD_RECOVERY",
           sessionId: session.sessionId
         });
-
         if (!response?.ok) {
           throw new Error(response?.error || "Unable to discard recording.");
         }
-
         await refreshRecoveryPanel();
       } catch (error) {
         setError(error.message);
@@ -480,16 +365,254 @@ async function refreshRecoveryPanel() {
   }
 }
 
-async function getState() {
+async function setPaused(sessionId, paused) {
   const response = await chrome.runtime.sendMessage({
-    type: "TABVAULT_GET_STATE"
+    type: "TABVAULT_SET_PAUSED",
+    sessionId,
+    paused
   });
 
   if (!response?.ok) {
-    throw new Error(response?.error || "Unable to read TabVault state.");
+    throw new Error(response?.error || "Unable to change pause state.");
   }
 
-  return response.state;
+  return response.recording;
+}
+
+async function setLocalPlayback(sessionId, enabled) {
+  const response = await chrome.runtime.sendMessage({
+    type: "TABVAULT_SET_LOCAL_PLAYBACK",
+    sessionId,
+    enabled
+  });
+
+  if (!response?.ok) {
+    throw new Error(response?.error || "Unable to change speaker playback.");
+  }
+
+  return response.recording;
+}
+
+async function stopCapture(sessionId) {
+  const response = await chrome.runtime.sendMessage({
+    type: "TABVAULT_STOP_CAPTURE",
+    sessionId
+  });
+
+  if (!response?.ok) {
+    throw new Error(response?.error || "Unable to stop tab capture.");
+  }
+
+  if (response.recording?.saved) {
+    setError(`Saved ${response.recording.filename}`);
+  }
+
+  return response.recording;
+}
+
+async function openRecordingTab(tabId) {
+  await chrome.tabs.update(tabId, { active: true });
+}
+
+function renderActiveRecordings() {
+  const card = document.getElementById("activeRecordingsCard");
+  const list = document.getElementById("activeRecordingsList");
+  const count = document.getElementById("activeRecordingCount");
+
+  list.textContent = "";
+  count.textContent = `${recordings.length} / ${MAX_CONCURRENT_RECORDINGS}`;
+  card.classList.toggle("hidden", recordings.length === 0);
+
+  for (const recording of recordings) {
+    const item = document.createElement("div");
+    item.className = "active-recording-item";
+
+    const title = document.createElement("div");
+    title.className = "active-recording-title";
+    title.textContent = recording.title || "Untitled tab";
+
+    const meta = document.createElement("div");
+    meta.className = "footnote active-recording-meta";
+
+    const elapsed = document.createElement("span");
+    elapsed.dataset.sessionElapsed = recording.sessionId;
+    elapsed.textContent = formatElapsed(recording);
+
+    const state = document.createElement("span");
+    state.textContent = ` · ${recording.status} · ${recording.sourceType}`;
+
+    meta.append(elapsed, state);
+
+    const speakerRow = document.createElement("label");
+    speakerRow.className = "active-recording-speaker";
+    const speakerLabel = document.createElement("span");
+    speakerLabel.textContent = "Play through speakers";
+    const speakerToggle = document.createElement("input");
+    speakerToggle.type = "checkbox";
+    speakerToggle.checked = Boolean(recording.localPlaybackEnabled);
+
+    speakerToggle.addEventListener("change", async () => {
+      speakerToggle.disabled = true;
+      try {
+        await setLocalPlayback(recording.sessionId, speakerToggle.checked);
+        await refreshState();
+      } catch (error) {
+        speakerToggle.checked = !speakerToggle.checked;
+        setError(error.message);
+      } finally {
+        speakerToggle.disabled = false;
+      }
+    });
+
+    speakerRow.append(speakerLabel, speakerToggle);
+
+    const actions = document.createElement("div");
+    actions.className = "active-recording-actions";
+
+    const openButton = document.createElement("button");
+    openButton.className = "secondary";
+    openButton.type = "button";
+    openButton.textContent = "Open tab";
+    openButton.addEventListener("click", () => {
+      openRecordingTab(recording.tabId).catch((error) => setError(error.message));
+    });
+
+    const pauseButton = document.createElement("button");
+    pauseButton.className = "secondary";
+    pauseButton.type = "button";
+    pauseButton.textContent = recording.status === "paused" ? "Resume" : "Pause";
+    pauseButton.disabled = recording.status === "error";
+    pauseButton.addEventListener("click", async () => {
+      pauseButton.disabled = true;
+      try {
+        await setPaused(recording.sessionId, recording.status !== "paused");
+        await refreshState();
+      } catch (error) {
+        setError(error.message);
+      } finally {
+        pauseButton.disabled = false;
+      }
+    });
+
+    const stopButton = document.createElement("button");
+    stopButton.type = "button";
+    stopButton.textContent = "Stop";
+    stopButton.addEventListener("click", async () => {
+      stopButton.disabled = true;
+      try {
+        await stopCapture(recording.sessionId);
+        await refreshState();
+      } catch (error) {
+        setError(error.message);
+      } finally {
+        stopButton.disabled = false;
+      }
+    });
+
+    actions.append(openButton, pauseButton, stopButton);
+    item.append(title, meta, speakerRow, actions);
+    list.append(item);
+  }
+}
+
+function renderCurrentTabState() {
+  const status = document.getElementById("status");
+  const recordButton = document.getElementById("recordButton");
+  const pauseButton = document.getElementById("pauseButton");
+  const videoStatus = document.getElementById("videoStatus");
+  const audioStatus = document.getElementById("audioStatus");
+  const localPlayback = document.getElementById("localPlayback");
+  const qualityProfile = document.getElementById("qualityProfile");
+  const details = document.getElementById("captureDetails");
+  const elapsed = document.getElementById("elapsedTime");
+  const captureTitle = document.getElementById("captureTitle");
+  const captureHint = document.getElementById("captureHint");
+  const sharePointOptions = document.getElementById("sharePointOptions");
+  const teamsCompanion = document.getElementById("teamsCompanion");
+  const teamsSpeakerState = document.getElementById("teamsSpeakerState");
+
+  currentRecording =
+    recordings.find((recording) => recording.tabId === activeTab?.id) || null;
+
+  status.textContent = recordings.length
+    ? `${recordings.length} active`
+    : "Idle";
+
+  const active = Boolean(currentRecording);
+  const paused = currentRecording?.status === "paused";
+  const errored = currentRecording?.status === "error";
+
+  recordButton.textContent = active ? "Stop this tab" : "Start this tab";
+  recordButton.dataset.action = active ? "stop" : "start";
+  recordButton.disabled = !active && recordings.length >= MAX_CONCURRENT_RECORDINGS;
+
+  pauseButton.classList.toggle("hidden", !active || errored);
+  pauseButton.textContent = paused ? "Resume" : "Pause";
+  pauseButton.dataset.action = paused ? "resume" : "pause";
+
+  videoStatus.textContent = active
+    ? (errored ? "Error" : "Active")
+    : "Ready";
+  audioStatus.textContent = active
+    ? (currentRecording.audio?.available ? "Active" : "Unavailable")
+    : "Ready";
+
+  if (active) {
+    localPlayback.checked = Boolean(currentRecording.localPlaybackEnabled);
+    qualityProfile.value = currentRecording.qualityProfile || "standard";
+    qualityProfile.disabled = true;
+  } else {
+    localPlayback.checked = activeSource?.type !== "teams";
+    qualityProfile.disabled = false;
+  }
+
+  localPlayback.disabled = false;
+
+  sharePointOptions.classList.toggle("hidden", activeSource?.type !== "sharepoint");
+  teamsCompanion.classList.toggle("hidden", activeSource?.type !== "teams");
+
+  if (activeSource?.type === "teams") {
+    teamsSpeakerState.textContent = localPlayback.checked ? "On" : "Muted";
+  }
+
+  details.classList.toggle("hidden", !active);
+
+  if (active) {
+    captureTitle.textContent = currentRecording.title || "Untitled tab";
+    elapsed.textContent = formatElapsed(currentRecording);
+
+    const stateHint = paused
+      ? " Recording is paused."
+      : errored
+        ? ` ${currentRecording.error || "Recording encountered an error."}`
+        : "";
+
+    captureHint.textContent =
+      "This tab is one active capture source. " +
+      (currentRecording.audio?.available
+        ? "Tab audio is being captured."
+        : "No tab audio track is currently available.") +
+      stateHint;
+  } else {
+    captureTitle.textContent = "";
+    elapsed.textContent = "00:00:00";
+    captureHint.textContent = "";
+  }
+
+  renderActiveRecordings();
+  startElapsedTimer();
+}
+
+async function refreshState() {
+  const state = await getState();
+  recordings = Array.isArray(state.recordings)
+    ? state.recordings
+    : state.recording
+      ? [state.recording]
+      : [];
+
+  renderCurrentTabState();
+  renderHistory(state.history);
 }
 
 async function startCapture() {
@@ -515,67 +638,18 @@ async function startCapture() {
     throw new Error(response?.error || "Unable to start tab capture.");
   }
 
-  renderRecordingState(response.recording);
-}
-
-async function stopCapture() {
-  const response = await chrome.runtime.sendMessage({
-    type: "TABVAULT_STOP_CAPTURE"
-  });
-
-  if (!response?.ok) {
-    throw new Error(response?.error || "Unable to stop tab capture.");
-  }
-
-  renderRecordingState(null);
-
-  if (response.recording?.saved) {
-    setError(`Saved ${response.recording.filename}`);
-  }
-}
-
-async function setPaused(paused) {
-  if (!currentRecording) {
-    return;
-  }
-
-  const response = await chrome.runtime.sendMessage({
-    type: "TABVAULT_SET_PAUSED",
-    paused
-  });
-
-  if (!response?.ok) {
-    throw new Error(response?.error || "Unable to change pause state.");
-  }
-
-  renderRecordingState(response.recording);
-}
-
-async function setLocalPlayback(enabled) {
-  if (!currentRecording) {
-    return;
-  }
-
-  const response = await chrome.runtime.sendMessage({
-    type: "TABVAULT_SET_LOCAL_PLAYBACK",
-    enabled
-  });
-
-  if (!response?.ok) {
-    throw new Error(response?.error || "Unable to change speaker playback.");
-  }
-
-  renderRecordingState(response.recording);
+  await refreshState();
 }
 
 async function init() {
   const sourceType = document.getElementById("sourceType");
   const pageTitle = document.getElementById("pageTitle");
   const pageUrl = document.getElementById("pageUrl");
+  const sourceMode = document.getElementById("sourceMode");
+  const sourceHint = document.getElementById("sourceHint");
   const recordButton = document.getElementById("recordButton");
   const pauseButton = document.getElementById("pauseButton");
   const localPlayback = document.getElementById("localPlayback");
-  const qualityProfile = document.getElementById("qualityProfile");
   const destinationFolder = document.getElementById("destinationFolder");
   const filenameTemplate = document.getElementById("filenameTemplate");
   const clearHistoryButton = document.getElementById("clearHistoryButton");
@@ -587,25 +661,25 @@ async function init() {
 
   activeSource = classifySource(activeTab?.url, activeTab?.title);
 
-  const sourceMode = document.getElementById("sourceMode");
-  const sourceHint = document.getElementById("sourceHint");
-
   sourceType.textContent = activeSource.label;
   sourceType.dataset.sourceType = activeSource.type;
-
   sourceMode.textContent = activeSource.mode || "";
   sourceMode.classList.toggle("hidden", !activeSource.mode);
-
   pageTitle.textContent = activeSource.title || activeTab?.title || "Untitled tab";
   pageUrl.textContent = activeTab?.url || "URL unavailable";
-
   sourceHint.textContent = activeSource.hint || "";
   sourceHint.classList.toggle("hidden", !activeSource.hint);
 
   const state = await getState();
   destinationFolder.value = state.settings?.destinationFolder || "TabVault";
   filenameTemplate.value = state.settings?.filenameTemplate || "{title} - {date}";
-  renderRecordingState(state.recording);
+  recordings = Array.isArray(state.recordings)
+    ? state.recordings
+    : state.recording
+      ? [state.recording]
+      : [];
+
+  renderCurrentTabState();
   renderHistory(state.history);
 
   try {
@@ -629,65 +703,66 @@ async function init() {
       destinationFolder: destinationFolder.value,
       filenameTemplate: filenameTemplate.value
     });
-
     if (!response?.ok) {
       throw new Error(response?.error || "Unable to save settings.");
     }
   };
 
-  destinationFolder.addEventListener("change", async () => {
-    try {
-      await saveSettings();
-    } catch (error) {
-      setError(error.message);
-    }
+  destinationFolder.addEventListener("change", () => {
+    saveSettings().catch((error) => setError(error.message));
   });
 
-  filenameTemplate.addEventListener("change", async () => {
-    try {
-      await saveSettings();
-    } catch (error) {
-      setError(error.message);
-    }
+  filenameTemplate.addEventListener("change", () => {
+    saveSettings().catch((error) => setError(error.message));
   });
 
   clearHistoryButton.addEventListener("click", async () => {
-    const confirmed = window.confirm("Clear TabVault recording history? This removes metadata only, not downloaded videos.");
-
-    if (!confirmed) {
+    if (!window.confirm(
+      "Clear TabVault recording history? This removes metadata only, not downloaded videos."
+    )) {
       return;
     }
 
+    const response = await chrome.runtime.sendMessage({
+      type: "TABVAULT_CLEAR_HISTORY"
+    });
+
+    if (!response?.ok) {
+      setError(response?.error || "Unable to clear recording history.");
+      return;
+    }
+
+    renderHistory([]);
+  });
+
+  recordButton.addEventListener("click", async () => {
     setError("");
-    clearHistoryButton.disabled = true;
+    recordButton.disabled = true;
 
     try {
-      const response = await chrome.runtime.sendMessage({
-        type: "TABVAULT_CLEAR_HISTORY"
-      });
-
-      if (!response?.ok) {
-        throw new Error(response?.error || "Unable to clear recording history.");
+      if (currentRecording) {
+        await stopCapture(currentRecording.sessionId);
+        await refreshState();
+      } else {
+        await startCapture();
       }
-
-      renderHistory([]);
     } catch (error) {
       setError(error.message);
     } finally {
-      clearHistoryButton.disabled = false;
+      renderCurrentTabState();
     }
   });
 
   pauseButton.addEventListener("click", async () => {
-    if (!currentRecording) {
-      return;
-    }
+    if (!currentRecording) return;
 
-    setError("");
     pauseButton.disabled = true;
-
     try {
-      await setPaused(pauseButton.dataset.action === "pause");
+      await setPaused(
+        currentRecording.sessionId,
+        currentRecording.status !== "paused"
+      );
+      await refreshState();
     } catch (error) {
       setError(error.message);
     } finally {
@@ -696,37 +771,17 @@ async function init() {
   });
 
   localPlayback.addEventListener("change", async () => {
-    if (!currentRecording) {
-      return;
-    }
+    if (!currentRecording) return;
 
-    setError("");
     localPlayback.disabled = true;
-
     try {
-      await setLocalPlayback(localPlayback.checked);
+      await setLocalPlayback(currentRecording.sessionId, localPlayback.checked);
+      await refreshState();
     } catch (error) {
       localPlayback.checked = !localPlayback.checked;
       setError(error.message);
     } finally {
       localPlayback.disabled = false;
-    }
-  });
-
-  recordButton.addEventListener("click", async () => {
-    setError("");
-    recordButton.disabled = true;
-
-    try {
-      if (recordButton.dataset.action === "stop") {
-        await stopCapture();
-      } else {
-        await startCapture();
-      }
-    } catch (error) {
-      setError(error.message);
-    } finally {
-      recordButton.disabled = false;
     }
   });
 }
@@ -737,6 +792,5 @@ init().catch((error) => {
   document.getElementById("recordButton").disabled = true;
   setError(error.message);
 });
-
 
 window.addEventListener("unload", stopElapsedTimer);
