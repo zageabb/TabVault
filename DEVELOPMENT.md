@@ -248,7 +248,7 @@ Evidence:
 - DEV-011 complete.
 
 ### DEV-012 — Recording history
-**Status:** Implemented — browser runtime verification pending
+**Status:** Complete
 
 Acceptance criteria:
 - Keep metadata only: title, time, duration, result, filename.
@@ -262,15 +262,26 @@ Evidence:
 - Popup shows the 10 most recent recordings with timestamp, duration, saved/recovered result, and filename.
 - History does not store video blobs or duplicate IndexedDB recording chunks.
 - A Clear action removes only history metadata and explicitly states that downloaded videos are unaffected.
-- Browser runtime verification is pending.
+- User runtime verification on 2026-10-07 confirmed completed recordings appear correctly in Recent recordings with the expected metadata.
+- DEV-012 complete.
 
 ### DEV-013 — Quality profiles
-**Status:** Not started
+**Status:** Implemented — browser runtime verification pending
 
 Acceptance criteria:
 - Standard and High presets.
 - Sensible bitrate defaults.
 - Source resolution preserved where practical.
+
+Evidence:
+- Popup now offers Standard and High quality presets before a recording starts.
+- Standard requests 4 Mbps video and 128 kbps audio.
+- High requests 8 Mbps video and 192 kbps audio.
+- The selected preset is passed through the service worker into MediaRecorder options.
+- Chrome's actual MediaRecorder bitrates are returned in active recorder metadata where exposed by the browser.
+- The selected quality profile is locked while a recording is active so bitrate does not change mid-session.
+- Tab capture resolution constraints are unchanged, preserving the source tab resolution/frame rate where Chrome provides it.
+- Browser runtime verification of both presets and resulting saved files is pending.
 
 ### DEV-014 — Destination and naming
 **Status:** Not started
