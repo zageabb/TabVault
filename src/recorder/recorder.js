@@ -1,11 +1,4 @@
-let captureStream = null;
-let captureTabId = null;
-let playbackAudioContext = null;
-let mediaRecorder = null;
-let recordingMeta = null;
-let localPlaybackEnabled = true;
-let activeSessionId = null;
-let chunkWriteChain = Promise.resolve();
+const activeSessions = new Map();
 
 const DB_NAME = "TabVaultRecordings";
 const DB_VERSION = 1;
@@ -38,12 +31,11 @@ function chooseMimeType() {
     "video/webm;codecs=vp8,opus",
     "video/webm"
   ];
-
   return candidates.find((type) => MediaRecorder.isTypeSupported(type)) || "";
 }
 
 function sanitizeFilename(value = "TabVault recording") {
-  return value
+  return String(value || "")
     .replace(/[\\/:*?"<>|]+/g, " ")
     .replace(/\s+/g, " ")
     .trim()
@@ -56,7 +48,6 @@ function sanitizeFolderPath(value = "TabVault") {
     .split("/")
     .map((part) => sanitizeFilename(part))
     .filter((part) => part && part !== "." && part !== "..");
-
   return parts.join("/") || "TabVault";
 }
 
@@ -81,14 +72,17 @@ function renderFilenameTemplate(meta = {}) {
   };
 
   const template = String(meta.filenameTemplate || "{title} - {date}");
-  const rendered = template.replace(/\{(title|date|time|source)\}/g, (_match, key) => replacements[key]);
+  const rendered = template.replace(
+    /\{(title|date|time|source)\}/g,
+    (_match, key) => replacements[key]
+  );
+
   return sanitizeFilename(rendered) || replacements.title;
 }
 
 function buildFilename(meta = {}) {
   const folder = sanitizeFolderPath(meta.destinationFolder || "TabVault");
-  const base = renderFilenameTemplate(meta);
-  return `${folder}/${base}.webm`;
+  return `${folder}/${renderFilenameTemplate(meta)}.webm`;
 }
 
 function openRecordingDb() {
@@ -106,9 +100,7 @@ function openRecordingDb() {
       }
 
       if (!db.objectStoreNames.contains(SESSIONS_STORE)) {
-        db.createObjectStore(SESSIONS_STORE, {
-          keyPath: "sessionId"
-        });
+        db.createObjectStore(SESSIONS_STORE, { keyPath: "sessionId" });
       }
     });
 
@@ -119,7 +111,6 @@ function openRecordingDb() {
 
 async function withStore(storeName, mode, operation) {
   const db = await openRecordingDb();
-
   try {
     return await new Promise((resolve, reject) => {
       const transaction = db.transaction(storeName, mode);
@@ -142,12 +133,12 @@ async function withStore(storeName, mode, operation) {
   }
 }
 
-async function createPersistedSession(meta, mimeType) {
-  const sessionId = crypto.randomUUID();
+async function createPersistedSession(sessionId, meta, mimeType) {
   const session = {
     sessionId,
     title: meta.title || "TabVault recording",
     sourceType: meta.sourceType || "generic",
+    qualityProfile: meta.qualityProfile || "standard",
     filenameTemplate: meta.filenameTemplate || "{title} - {date}",
     destinationFolder: meta.destinationFolder || "TabVault",
     startedAt: meta.startedAt || Date.now(),
@@ -158,11 +149,7 @@ async function createPersistedSession(meta, mimeType) {
     updatedAt: Date.now()
   };
 
-  await withStore(SESSIONS_STORE, "readwrite", (store) => {
-    store.put(session);
-  });
-
-  return sessionId;
+  await withStore(SESSIONS_STORE, "readwrite", (store) => store.put(session));
 }
 
 async function persistChunk(sessionId, index, blob) {
@@ -177,7 +164,6 @@ async function persistChunk(sessionId, index, blob) {
   });
 
   const db = await openRecordingDb();
-
   try {
     await new Promise((resolve, reject) => {
       const transaction = db.transaction(SESSIONS_STORE, "readwrite");
@@ -193,7 +179,6 @@ async function persistChunk(sessionId, index, blob) {
           store.put(session);
         }
       });
-
       request.addEventListener("error", () => reject(request.error));
       transaction.addEventListener("complete", resolve);
       transaction.addEventListener("error", () => reject(transaction.error));
@@ -205,7 +190,6 @@ async function persistChunk(sessionId, index, blob) {
 
 async function readPersistedChunks(sessionId) {
   const db = await openRecordingDb();
-
   try {
     return await new Promise((resolve, reject) => {
       const transaction = db.transaction(CHUNKS_STORE, "readonly");
@@ -214,12 +198,12 @@ async function readPersistedChunks(sessionId) {
       const request = index.getAll(IDBKeyRange.only(sessionId));
 
       request.addEventListener("success", () => {
-        const chunks = (request.result || [])
-          .sort((a, b) => a.index - b.index)
-          .map((entry) => entry.blob);
-        resolve(chunks);
+        resolve(
+          (request.result || [])
+            .sort((a, b) => a.index - b.index)
+            .map((entry) => entry.blob)
+        );
       });
-
       request.addEventListener("error", () => reject(request.error));
     });
   } finally {
@@ -229,20 +213,18 @@ async function readPersistedChunks(sessionId) {
 
 async function listPersistedSessions() {
   const db = await openRecordingDb();
-
   try {
     return await new Promise((resolve, reject) => {
       const transaction = db.transaction(SESSIONS_STORE, "readonly");
-      const store = transaction.objectStore(SESSIONS_STORE);
-      const request = store.getAll();
+      const request = transaction.objectStore(SESSIONS_STORE).getAll();
 
       request.addEventListener("success", () => {
-        const sessions = (request.result || [])
-          .filter((session) => Number(session.chunkCount || 0) > 0)
-          .sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
-        resolve(sessions);
+        resolve(
+          (request.result || [])
+            .filter((session) => Number(session.chunkCount || 0) > 0)
+            .sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0))
+        );
       });
-
       request.addEventListener("error", () => reject(request.error));
     });
   } finally {
@@ -250,56 +232,10 @@ async function listPersistedSessions() {
   }
 }
 
-async function recoverPersistedSession(sessionId) {
-  const sessions = await listPersistedSessions();
-  const session = sessions.find((item) => item.sessionId === sessionId);
-
-  if (!session) {
-    throw new Error("Recoverable recording session was not found.");
-  }
-
-  const chunks = await readPersistedChunks(sessionId);
-
-  if (!chunks.length) {
-    throw new Error("No persisted media chunks were found for this recording.");
-  }
-
-  const mimeType = session.mimeType || "video/webm";
-  const blob = new Blob(chunks, { type: mimeType });
-  const filename = buildFilename({
-    title: session.title || "Recovered TabVault recording",
-    sourceType: session.sourceType || "generic",
-    filenameTemplate: session.filenameTemplate || "{title} - {date}",
-    destinationFolder: session.destinationFolder || "TabVault",
-    startedAt: session.startedAt || Date.now()
-  });
-
-  if (blob.size <= 0) {
-    throw new Error("Recovered recording is empty.");
-  }
-
-  await downloadBlob(blob, filename);
-
-  await deletePersistedSession(sessionId);
-
-  return {
-    saved: true,
-    recovered: true,
-    filename,
-    size: blob.size,
-    mimeType,
-    chunkCount: chunks.length,
-    sessionId
-  };
-}
-
 async function deletePersistedSession(sessionId) {
-  if (!sessionId) {
-    return;
-  }
+  if (!sessionId) return;
 
   const db = await openRecordingDb();
-
   try {
     await new Promise((resolve, reject) => {
       const transaction = db.transaction(
@@ -317,11 +253,9 @@ async function deletePersistedSession(sessionId) {
           sessionsStore.delete(sessionId);
           return;
         }
-
         chunksStore.delete(cursor.primaryKey);
         cursor.continue();
       });
-
       cursorRequest.addEventListener("error", () => reject(cursorRequest.error));
       transaction.addEventListener("complete", resolve);
       transaction.addEventListener("error", () => reject(transaction.error));
@@ -332,12 +266,7 @@ async function deletePersistedSession(sessionId) {
 }
 
 async function markSessionFinalizing(sessionId) {
-  if (!sessionId) {
-    return;
-  }
-
   const db = await openRecordingDb();
-
   try {
     await new Promise((resolve, reject) => {
       const transaction = db.transaction(SESSIONS_STORE, "readwrite");
@@ -352,7 +281,6 @@ async function markSessionFinalizing(sessionId) {
           store.put(session);
         }
       });
-
       request.addEventListener("error", () => reject(request.error));
       transaction.addEventListener("complete", resolve);
       transaction.addEventListener("error", () => reject(transaction.error));
@@ -362,68 +290,8 @@ async function markSessionFinalizing(sessionId) {
   }
 }
 
-async function stopLocalAudioPassthrough() {
-  if (!playbackAudioContext) {
-    return;
-  }
-
-  try {
-    await playbackAudioContext.close();
-  } catch {
-    // Ignore close errors during teardown.
-  }
-
-  playbackAudioContext = null;
-}
-
-async function startLocalAudioPassthrough(stream) {
-  await stopLocalAudioPassthrough();
-
-  if (!localPlaybackEnabled || stream.getAudioTracks().length === 0) {
-    return false;
-  }
-
-  const AudioContextClass = globalThis.AudioContext || globalThis.webkitAudioContext;
-
-  if (!AudioContextClass) {
-    return false;
-  }
-
-  const context = new AudioContextClass();
-  const source = context.createMediaStreamSource(stream);
-  source.connect(context.destination);
-
-  if (context.state === "suspended") {
-    try {
-      await context.resume();
-    } catch {
-      // Capture itself remains valid even if local playback cannot be resumed.
-    }
-  }
-
-  playbackAudioContext = context;
-  return true;
-}
-
-async function setLocalPlayback(enabled) {
-  localPlaybackEnabled = Boolean(enabled);
-
-  if (!captureStream) {
-    return { localPlayback: false };
-  }
-
-  if (localPlaybackEnabled) {
-    const active = await startLocalAudioPassthrough(captureStream);
-    return { localPlayback: active };
-  }
-
-  await stopLocalAudioPassthrough();
-  return { localPlayback: false };
-}
-
 async function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
-
   try {
     const response = await chrome.runtime.sendMessage({
       type: "TABVAULT_DOWNLOAD_BLOB",
@@ -435,47 +303,170 @@ async function downloadBlob(blob, filename) {
     if (!response?.ok) {
       throw new Error(response?.error || "Browser download could not be started.");
     }
-
     return response.downloadId || null;
   } finally {
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 }
 
-function resetRecorderState() {
-  mediaRecorder = null;
-  recordingMeta = null;
-  activeSessionId = null;
-  chunkWriteChain = Promise.resolve();
+async function recoverPersistedSession(sessionId) {
+  const sessions = await listPersistedSessions();
+  const session = sessions.find((item) => item.sessionId === sessionId);
+  if (!session) throw new Error("Recoverable recording session was not found.");
+
+  const chunks = await readPersistedChunks(sessionId);
+  if (!chunks.length) {
+    throw new Error("No persisted media chunks were found for this recording.");
+  }
+
+  const mimeType = session.mimeType || "video/webm";
+  const blob = new Blob(chunks, { type: mimeType });
+  if (blob.size <= 0) throw new Error("Recovered recording is empty.");
+
+  const filename = buildFilename(session);
+  await downloadBlob(blob, filename);
+  await deletePersistedSession(sessionId);
+
+  return {
+    saved: true,
+    recovered: true,
+    filename,
+    size: blob.size,
+    mimeType,
+    chunkCount: chunks.length,
+    sessionId
+  };
 }
 
-function stopMediaRecorder({ save = true } = {}) {
-  return new Promise((resolve, reject) => {
-    if (!mediaRecorder || mediaRecorder.state === "inactive") {
-      resetRecorderState();
-      resolve({
-        saved: false,
-        filename: null,
-        size: 0,
-        mimeType: null,
-        persistence: "indexeddb"
-      });
-      return;
+function getActiveSession(sessionId) {
+  const session = activeSessions.get(sessionId);
+  if (!session) throw new Error("Active recording session was not found.");
+  return session;
+}
+
+async function stopAudioPassthrough(session) {
+  if (!session.audioContext) return;
+
+  try {
+    await session.audioContext.close();
+  } catch {
+    // Ignore close errors during teardown.
+  }
+  session.audioContext = null;
+}
+
+async function startAudioPassthrough(session) {
+  await stopAudioPassthrough(session);
+
+  if (!session.localPlaybackEnabled || session.stream.getAudioTracks().length === 0) {
+    return false;
+  }
+
+  const AudioContextClass = globalThis.AudioContext || globalThis.webkitAudioContext;
+  if (!AudioContextClass) return false;
+
+  const context = new AudioContextClass();
+  const source = context.createMediaStreamSource(session.stream);
+  source.connect(context.destination);
+
+  if (context.state === "suspended") {
+    try {
+      await context.resume();
+    } catch {
+      // Capture remains valid even if local playback cannot resume.
     }
+  }
 
-    const recorder = mediaRecorder;
-    const meta = recordingMeta;
-    const sessionId = activeSessionId;
+  session.audioContext = context;
+  return true;
+}
 
-    const onStop = async () => {
+async function setLocalPlayback(sessionId, enabled) {
+  const session = getActiveSession(sessionId);
+  session.localPlaybackEnabled = Boolean(enabled);
+
+  if (session.localPlaybackEnabled) {
+    return { localPlayback: await startAudioPassthrough(session) };
+  }
+
+  await stopAudioPassthrough(session);
+  return { localPlayback: false };
+}
+
+async function startMediaRecorder(session) {
+  const mimeType = chooseMimeType();
+  const quality = resolveQualityProfile(session.meta.qualityProfile);
+  const options = {
+    ...(mimeType ? { mimeType } : {}),
+    videoBitsPerSecond: quality.videoBitsPerSecond,
+    audioBitsPerSecond: quality.audioBitsPerSecond
+  };
+
+  session.meta = {
+    ...session.meta,
+    qualityProfile: quality.id
+  };
+  session.chunkWriteChain = Promise.resolve();
+
+  await createPersistedSession(
+    session.sessionId,
+    session.meta,
+    mimeType || "video/webm"
+  );
+
+  let chunkIndex = 0;
+  const recorder = new MediaRecorder(session.stream, options);
+  session.mediaRecorder = recorder;
+
+  recorder.addEventListener("dataavailable", (event) => {
+    if (!event.data || event.data.size <= 0) return;
+
+    const index = chunkIndex++;
+    session.chunkWriteChain = session.chunkWriteChain.then(() =>
+      persistChunk(session.sessionId, index, event.data)
+    );
+  });
+
+  recorder.start(CHUNK_TIMESLICE_MS);
+
+  return {
+    mimeType: recorder.mimeType || mimeType || "video/webm",
+    persistence: "indexeddb",
+    chunkIntervalMs: CHUNK_TIMESLICE_MS,
+    sessionId: session.sessionId,
+    quality: {
+      id: quality.id,
+      label: quality.label,
+      videoBitsPerSecond: recorder.videoBitsPerSecond || quality.videoBitsPerSecond,
+      audioBitsPerSecond: recorder.audioBitsPerSecond || quality.audioBitsPerSecond
+    }
+  };
+}
+
+async function finalizeRecorder(session, save = true) {
+  const recorder = session.mediaRecorder;
+
+  if (!recorder || recorder.state === "inactive") {
+    return {
+      saved: false,
+      filename: null,
+      size: 0,
+      mimeType: null,
+      persistence: "indexeddb",
+      sessionId: session.sessionId
+    };
+  }
+
+  return await new Promise((resolve, reject) => {
+    recorder.addEventListener("stop", async () => {
       try {
-        await chunkWriteChain;
-        await markSessionFinalizing(sessionId);
+        await session.chunkWriteChain;
+        await markSessionFinalizing(session.sessionId);
 
         const mimeType = recorder.mimeType || chooseMimeType() || "video/webm";
-        const chunks = await readPersistedChunks(sessionId);
+        const chunks = await readPersistedChunks(session.sessionId);
         const blob = new Blob(chunks, { type: mimeType });
-        const filename = buildFilename(meta);
+        const filename = buildFilename(session.meta);
 
         if (save && blob.size > 0) {
           await downloadBlob(blob, filename);
@@ -488,124 +479,75 @@ function stopMediaRecorder({ save = true } = {}) {
           mimeType,
           persistence: "indexeddb",
           chunkCount: chunks.length,
-          sessionId
+          sessionId: session.sessionId
         };
 
-        await deletePersistedSession(sessionId);
-        resetRecorderState();
+        await deletePersistedSession(session.sessionId);
         resolve(info);
       } catch (error) {
         reject(error);
       }
-    };
+    }, { once: true });
 
-    recorder.addEventListener("stop", onStop, { once: true });
     recorder.stop();
   });
 }
 
-function pauseMediaRecorder() {
-  if (!mediaRecorder || mediaRecorder.state !== "recording") {
-    return false;
+async function stopSession(sessionId, { notify = false, save = true } = {}) {
+  const session = getActiveSession(sessionId);
+  const result = await finalizeRecorder(session, save);
+
+  await stopAudioPassthrough(session);
+  for (const track of session.stream.getTracks()) {
+    track.stop();
   }
 
-  mediaRecorder.pause();
-  return true;
-}
+  activeSessions.delete(sessionId);
 
-function resumeMediaRecorder() {
-  if (!mediaRecorder || mediaRecorder.state !== "paused") {
-    return false;
-  }
-
-  mediaRecorder.resume();
-  return true;
-}
-
-async function startMediaRecorder(stream, meta) {
-  const mimeType = chooseMimeType();
-  const quality = resolveQualityProfile(meta.qualityProfile);
-  const options = {
-    ...(mimeType ? { mimeType } : {}),
-    videoBitsPerSecond: quality.videoBitsPerSecond,
-    audioBitsPerSecond: quality.audioBitsPerSecond
-  };
-
-  recordingMeta = {
-    ...meta,
-    qualityProfile: quality.id
-  };
-  chunkWriteChain = Promise.resolve();
-  activeSessionId = await createPersistedSession(
-    meta,
-    mimeType || "video/webm"
-  );
-
-  let chunkIndex = 0;
-  mediaRecorder = new MediaRecorder(stream, options);
-
-  mediaRecorder.addEventListener("dataavailable", (event) => {
-    if (!event.data || event.data.size <= 0 || !activeSessionId) {
-      return;
-    }
-
-    const sessionId = activeSessionId;
-    const index = chunkIndex;
-    chunkIndex += 1;
-
-    chunkWriteChain = chunkWriteChain.then(() =>
-      persistChunk(sessionId, index, event.data)
-    );
-  });
-
-  mediaRecorder.start(CHUNK_TIMESLICE_MS);
-
-  return {
-    mimeType: mediaRecorder.mimeType || mimeType || "video/webm",
-    persistence: "indexeddb",
-    chunkIntervalMs: CHUNK_TIMESLICE_MS,
-    sessionId: activeSessionId,
-    quality: {
-      id: quality.id,
-      label: quality.label,
-      videoBitsPerSecond: mediaRecorder.videoBitsPerSecond || quality.videoBitsPerSecond,
-      audioBitsPerSecond: mediaRecorder.audioBitsPerSecond || quality.audioBitsPerSecond
-    }
-  };
-}
-
-async function stopStream({ notify = false, save = true } = {}) {
-  const previousTabId = captureTabId;
-  const recording = await stopMediaRecorder({ save });
-
-  await stopLocalAudioPassthrough();
-
-  if (captureStream) {
-    for (const track of captureStream.getTracks()) {
-      track.stop();
-    }
-  }
-
-  captureStream = null;
-  captureTabId = null;
-
-  if (notify && previousTabId !== null) {
+  if (notify) {
     await chrome.runtime.sendMessage({
       type: "TABVAULT_CAPTURE_ENDED",
-      tabId: previousTabId,
-      recording,
+      sessionId,
+      tabId: session.tabId,
+      recording: result,
       target: "service-worker"
     });
   }
 
-  return recording;
+  return result;
 }
 
-async function startStream(streamId, tabId, meta = {}, playbackEnabled = true) {
-  await stopStream({ save: false });
-  localPlaybackEnabled = Boolean(playbackEnabled);
+function pauseSession(sessionId) {
+  const session = getActiveSession(sessionId);
+  if (!session.mediaRecorder || session.mediaRecorder.state !== "recording") {
+    return false;
+  }
+  session.mediaRecorder.pause();
+  return true;
+}
 
-  captureStream = await navigator.mediaDevices.getUserMedia({
+function resumeSession(sessionId) {
+  const session = getActiveSession(sessionId);
+  if (!session.mediaRecorder || session.mediaRecorder.state !== "paused") {
+    return false;
+  }
+  session.mediaRecorder.resume();
+  return true;
+}
+
+async function startSession({
+  sessionId,
+  streamId,
+  tabId,
+  meta = {},
+  localPlaybackEnabled = true
+}) {
+  if (!sessionId) throw new Error("A recording session ID is required.");
+  if (activeSessions.has(sessionId)) {
+    throw new Error("Recording session is already active.");
+  }
+
+  const stream = await navigator.mediaDevices.getUserMedia({
     video: {
       mandatory: {
         chromeMediaSource: "tab",
@@ -620,63 +562,80 @@ async function startStream(streamId, tabId, meta = {}, playbackEnabled = true) {
     }
   });
 
-  captureTabId = tabId;
-
-  const videoTrack = captureStream.getVideoTracks()[0];
-  const audioTrack = captureStream.getAudioTracks()[0];
+  const videoTrack = stream.getVideoTracks()[0];
+  const audioTrack = stream.getAudioTracks()[0];
 
   if (!videoTrack) {
-    await stopStream({ save: false });
+    for (const track of stream.getTracks()) track.stop();
     throw new Error("Chrome did not provide a video track for this tab.");
   }
 
+  const session = {
+    sessionId,
+    tabId,
+    stream,
+    audioContext: null,
+    mediaRecorder: null,
+    chunkWriteChain: Promise.resolve(),
+    localPlaybackEnabled: Boolean(localPlaybackEnabled),
+    meta: {
+      ...meta,
+      startedAt: meta.startedAt || Date.now()
+    }
+  };
+
+  activeSessions.set(sessionId, session);
+
   videoTrack.addEventListener("ended", () => {
-    stopStream({ notify: true, save: true }).catch(() => {});
+    if (!activeSessions.has(sessionId)) return;
+    stopSession(sessionId, { notify: true, save: true }).catch(() => {});
   }, { once: true });
 
-  const videoSettings = videoTrack.getSettings();
-  const audioSettings = audioTrack?.getSettings?.() || {};
-  const localPlayback = await startLocalAudioPassthrough(captureStream);
-  const recorder = await startMediaRecorder(captureStream, {
-    title: meta.title,
-    sourceType: meta.sourceType,
-    qualityProfile: meta.qualityProfile,
-    filenameTemplate: meta.filenameTemplate,
-    destinationFolder: meta.destinationFolder,
-    startedAt: meta.startedAt || Date.now()
-  });
+  try {
+    const videoSettings = videoTrack.getSettings();
+    const audioSettings = audioTrack?.getSettings?.() || {};
+    const localPlayback = await startAudioPassthrough(session);
+    const recorder = await startMediaRecorder(session);
 
-  return {
-    video: {
-      width: videoSettings.width || null,
-      height: videoSettings.height || null,
-      frameRate: videoSettings.frameRate || null
-    },
-    audio: {
-      available: Boolean(audioTrack),
-      sampleRate: audioSettings.sampleRate || null,
-      channelCount: audioSettings.channelCount || null,
-      localPlayback
-    },
-    recorder
-  };
+    return {
+      video: {
+        width: videoSettings.width || null,
+        height: videoSettings.height || null,
+        frameRate: videoSettings.frameRate || null
+      },
+      audio: {
+        available: Boolean(audioTrack),
+        sampleRate: audioSettings.sampleRate || null,
+        channelCount: audioSettings.channelCount || null,
+        localPlayback
+      },
+      recorder
+    };
+  } catch (error) {
+    activeSessions.delete(sessionId);
+    await stopAudioPassthrough(session);
+    for (const track of stream.getTracks()) track.stop();
+    await deletePersistedSession(sessionId).catch(() => {});
+    throw error;
+  }
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "TABVAULT_OFFSCREEN_START") {
-    startStream(
-      message.streamId,
-      message.tabId,
-      message.meta,
-      message.localPlaybackEnabled
-    )
+    startSession({
+      sessionId: message.sessionId,
+      streamId: message.streamId,
+      tabId: message.tabId,
+      meta: message.meta,
+      localPlaybackEnabled: message.localPlaybackEnabled
+    })
       .then((media) => sendResponse({ ok: true, ...media }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }
 
   if (message?.type === "TABVAULT_OFFSCREEN_SET_LOCAL_PLAYBACK") {
-    setLocalPlayback(message.enabled)
+    setLocalPlayback(message.sessionId, message.enabled)
       .then((audio) => sendResponse({ ok: true, audio }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
@@ -684,8 +643,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message?.type === "TABVAULT_OFFSCREEN_PAUSE") {
     try {
-      const paused = pauseMediaRecorder();
-      sendResponse({ ok: paused });
+      sendResponse({ ok: pauseSession(message.sessionId) });
     } catch (error) {
       sendResponse({ ok: false, error: error.message });
     }
@@ -694,8 +652,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message?.type === "TABVAULT_OFFSCREEN_RESUME") {
     try {
-      const resumed = resumeMediaRecorder();
-      sendResponse({ ok: resumed });
+      sendResponse({ ok: resumeSession(message.sessionId) });
     } catch (error) {
       sendResponse({ ok: false, error: error.message });
     }
@@ -724,7 +681,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (message?.type === "TABVAULT_OFFSCREEN_STOP") {
-    stopStream({ save: true })
+    stopSession(message.sessionId, { save: true })
       .then((recording) => sendResponse({ ok: true, recording }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
