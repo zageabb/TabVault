@@ -504,6 +504,8 @@ async function startCapture() {
     url: activeTab.url,
     sourceType: activeSource.type,
     qualityProfile: document.getElementById("qualityProfile").value,
+    destinationFolder: document.getElementById("destinationFolder").value,
+    filenameTemplate: document.getElementById("filenameTemplate").value,
     localPlaybackEnabled: document.getElementById("localPlayback").checked,
     autoStopOnEnded: document.getElementById("autoStopOnEnded")?.checked ?? false,
     followPlayback: document.getElementById("followPlayback")?.checked ?? false
@@ -574,6 +576,8 @@ async function init() {
   const pauseButton = document.getElementById("pauseButton");
   const localPlayback = document.getElementById("localPlayback");
   const qualityProfile = document.getElementById("qualityProfile");
+  const destinationFolder = document.getElementById("destinationFolder");
+  const filenameTemplate = document.getElementById("filenameTemplate");
   const clearHistoryButton = document.getElementById("clearHistoryButton");
 
   [activeTab] = await chrome.tabs.query({
@@ -599,6 +603,8 @@ async function init() {
   sourceHint.classList.toggle("hidden", !activeSource.hint);
 
   const state = await getState();
+  destinationFolder.value = state.settings?.destinationFolder || "TabVault";
+  filenameTemplate.value = state.settings?.filenameTemplate || "{title} - {date}";
   renderRecordingState(state.recording);
   renderHistory(state.history);
 
@@ -616,6 +622,34 @@ async function init() {
       document.getElementById("teamsCameraState").textContent = "Check manually";
     }
   }
+
+  const saveSettings = async () => {
+    const response = await chrome.runtime.sendMessage({
+      type: "TABVAULT_SAVE_SETTINGS",
+      destinationFolder: destinationFolder.value,
+      filenameTemplate: filenameTemplate.value
+    });
+
+    if (!response?.ok) {
+      throw new Error(response?.error || "Unable to save settings.");
+    }
+  };
+
+  destinationFolder.addEventListener("change", async () => {
+    try {
+      await saveSettings();
+    } catch (error) {
+      setError(error.message);
+    }
+  });
+
+  filenameTemplate.addEventListener("change", async () => {
+    try {
+      await saveSettings();
+    } catch (error) {
+      setError(error.message);
+    }
+  });
 
   clearHistoryButton.addEventListener("click", async () => {
     const confirmed = window.confirm("Clear TabVault recording history? This removes metadata only, not downloaded videos.");
