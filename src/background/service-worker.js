@@ -256,6 +256,7 @@ async function startCapture(message) {
     meta: {
       title: message.title || "Untitled tab",
       sourceType: message.sourceType || SOURCE_TYPES.GENERIC,
+      qualityProfile: message.qualityProfile || "standard",
       startedAt
     }
   });
@@ -272,6 +273,7 @@ async function startCapture(message) {
     sourceType: message.sourceType || SOURCE_TYPES.GENERIC,
     startedAt,
     localPlaybackEnabled,
+    qualityProfile: response.recorder?.quality?.id || message.qualityProfile || "standard",
     recorder: response.recorder || null,
     video: response.video || null,
     audio: response.audio || {
