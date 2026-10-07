@@ -280,6 +280,122 @@ async function removeRecording(sessionId) {
   await writeState({ recordings });
 }
 
+
+async function registerDisplaySession(message) {
+  const current = await readState();
+
+  if (current.recordings.length >= MAX_CONCURRENT_RECORDINGS) {
+    throw new Error(
+      `TabVault supports up to ${MAX_CONCURRENT_RECORDINGS} simultaneous recordings.`
+    );
+  }
+
+  if (current.recordings.some((recording) => recording.tabId === message.tabId)) {
+    throw new Error("This browser tab is already being recorded.");
+  }
+
+  const recording = {
+    sessionId: message.sessionId,
+    status: "capturing",
+    tabId: message.tabId,
+    title: message.title || "Window / Screen recording",
+    url: message.url || "",
+    sourceType: message.sourceType || SOURCE_TYPES.GENERIC,
+    captureMode: "display",
+    startedAt: message.startedAt || Date.now(),
+    totalPausedMs: 0,
+    pausedAt: null,
+    localPlaybackEnabled: false,
+    qualityProfile: message.qualityProfile || "standard",
+    recorder: message.recorder || null,
+    video: message.video || null,
+    audio: message.audio || {
+      available: false,
+      sampleRate: null,
+      channelCount: null,
+      localPlayback: false
+    },
+    lifecycle: {
+      autoStopOnEnded: false,
+      followPlayback: false
+    }
+  };
+
+  await writeState({ recordings: [...current.recordings, recording] });
+  return recording;
+}
+
+async function updateDisplaySession(message) {
+  const current = await readState();
+  const active = findRecording(current, message.sessionId);
+
+  if (!active) {
+    throw new Error("Active display recording was not found.");
+  }
+
+  const nextStatus = message.status || active.status;
+  const now = Date.now();
+  let totalPausedMs = Number(active.totalPausedMs || 0);
+  let pausedAt = active.pausedAt || null;
+
+  if (nextStatus === "paused" && active.status !== "paused") {
+    pausedAt = now;
+  } else if (nextStatus === "capturing" && active.status === "paused" && pausedAt) {
+    totalPausedMs += Math.max(0, now - pausedAt);
+    pausedAt = null;
+  }
+
+  return await replaceRecording(message.sessionId, (recording) => ({
+    ...recording,
+    status: nextStatus,
+    pausedAt,
+    totalPausedMs,
+    audio: message.audio ? { ...(recording.audio || {}), ...message.audio } : recording.audio,
+    video: message.video ? { ...(recording.video || {}), ...message.video } : recording.video
+  }));
+}
+
+async function completeDisplaySession(message) {
+  const current = await readState();
+  const active = findRecording(current, message.sessionId);
+  const endedAt = Date.now();
+
+  if (active && message.recording?.saved) {
+    await appendHistory({
+      title: active.title,
+      sourceType: active.sourceType,
+      captureMode: "display",
+      startedAt: active.startedAt,
+      endedAt,
+      durationMs: recordingDurationMs(active, endedAt),
+      result: "saved",
+      filename: message.recording.filename,
+      size: message.recording.size
+    });
+  }
+
+  if (active) {
+    await removeRecording(active.sessionId);
+  }
+
+  return message.recording || null;
+}
+
+async function sendDisplayCommand(sessionId, command) {
+  const response = await chrome.runtime.sendMessage({
+    type: "TABVAULT_DISPLAY_COMMAND",
+    target: "display-controller",
+    sessionId,
+    command
+  });
+
+  if (!response?.ok) {
+    throw new Error(response?.error || `Unable to ${command} display recording.`);
+  }
+
+  return response;
+}
+
 async function startCapture(message) {
   const current = await readState();
 
@@ -413,6 +529,11 @@ async function stopCapture(sessionId) {
   const active = findRecording(current, sessionId);
   if (!active) return null;
 
+  if (active.captureMode === "display") {
+    const response = await sendDisplayCommand(sessionId, "stop");
+    return response.recording || null;
+  }
+
   const response = await chrome.runtime.sendMessage({
     type: "TABVAULT_OFFSCREEN_STOP",
     sessionId
@@ -449,6 +570,14 @@ async function setRecordingPaused(sessionId, paused) {
 
   if (!active) {
     throw new Error("Active TabVault recording was not found.");
+  }
+
+  if (active.captureMode === "display") {
+    const response = await sendDisplayCommand(sessionId, paused ? "pause" : "resume");
+    return response.recording || await updateDisplaySession({
+      sessionId,
+      status: paused ? "paused" : "capturing"
+    });
   }
 
   const response = await chrome.runtime.sendMessage({
@@ -638,6 +767,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "TABVAULT_GET_STATE") {
     readState()
       .then((state) => sendResponse({ ok: true, state }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  if (message?.type === "TABVAULT_REGISTER_DISPLAY_SESSION") {
+    registerDisplaySession(message)
+      .then((recording) => sendResponse({ ok: true, recording }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  if (message?.type === "TABVAULT_UPDATE_DISPLAY_SESSION") {
+    updateDisplaySession(message)
+      .then((recording) => sendResponse({ ok: true, recording }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  if (message?.type === "TABVAULT_COMPLETE_DISPLAY_SESSION") {
+    completeDisplaySession(message)
+      .then((recording) => sendResponse({ ok: true, recording }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }
