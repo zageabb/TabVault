@@ -206,3 +206,9 @@ button.secondary {
   font-size: 12px;
   font-weight: 600;
 }
+
+
+#qualityProfile {
+  min-width: 110px;
+  padding: 4px 6px;
+}
