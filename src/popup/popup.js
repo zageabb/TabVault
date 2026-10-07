@@ -553,7 +553,7 @@ function renderCurrentTabState() {
 
   recordButton.textContent = active
     ? (currentRecording.captureMode === "display" ? "Stop window / screen" : "Stop this tab")
-    : (genericSource && captureMode.value === "display" ? "Start window / screen" : "Start this tab");
+    : (genericSource && captureMode.value === "display" ? "Open window / screen recorder" : "Start this tab");
   recordButton.dataset.action = active ? "stop" : "start";
   recordButton.disabled = !active && recordings.length >= MAX_CONCURRENT_RECORDINGS;
 
@@ -635,32 +635,26 @@ async function refreshState() {
   renderHistory(state.history);
 }
 
-function chooseDesktopSourceFromPopup() {
-  return new Promise((resolve, reject) => {
-    try {
-      chrome.desktopCapture.chooseDesktopMedia(
-        ["window", "screen", "audio"],
-        (streamId, options = {}) => {
-          if (chrome.runtime.lastError) {
-            reject(new Error(chrome.runtime.lastError.message));
-            return;
-          }
-
-          if (!streamId) {
-            reject(new Error("Window / screen selection was cancelled."));
-            return;
-          }
-
-          resolve({
-            streamId,
-            canRequestAudioTrack: Boolean(options.canRequestAudioTrack)
-          });
-        }
-      );
-    } catch (error) {
-      reject(error);
-    }
+function openDisplayController() {
+  const params = new URLSearchParams({
+    tabId: String(activeTab.id),
+    title: activeSource.title || activeTab.title || "Window / Screen recording",
+    url: activeTab.url || "",
+    quality: document.getElementById("qualityProfile").value,
+    folder: document.getElementById("destinationFolder").value,
+    template: document.getElementById("filenameTemplate").value,
+    playback: document.getElementById("localPlayback").checked ? "1" : "0"
   });
+
+  const controllerUrl = chrome.runtime.getURL(
+    `src/display/display-controller.html?${params.toString()}`
+  );
+
+  window.open(
+    controllerUrl,
+    "tabvault-display-controller",
+    "popup,width=430,height=560"
+  );
 }
 
 async function startCapture() {
@@ -672,10 +666,9 @@ async function startCapture() {
     ? document.getElementById("captureMode").value
     : "tab";
 
-  let desktopSelection = null;
-
   if (captureMode === "display") {
-    desktopSelection = await chooseDesktopSourceFromPopup();
+    openDisplayController();
+    return;
   }
 
   const response = await chrome.runtime.sendMessage({
@@ -684,9 +677,9 @@ async function startCapture() {
     title: activeSource.title || activeTab.title,
     url: activeTab.url,
     sourceType: activeSource.type,
-    captureMode,
-    desktopStreamId: desktopSelection?.streamId || null,
-    canRequestAudioTrack: desktopSelection?.canRequestAudioTrack || false,
+    captureMode: "tab",
+    desktopStreamId: null,
+    canRequestAudioTrack: false,
     qualityProfile: document.getElementById("qualityProfile").value,
     destinationFolder: document.getElementById("destinationFolder").value,
     filenameTemplate: document.getElementById("filenameTemplate").value,
