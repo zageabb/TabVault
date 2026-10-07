@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TabVault Window / Screen Recorder</title>
+  <link rel="stylesheet" href="display-controller.css">
+</head>
+<body>
+  <main class="app">
+    <header>
+      <div>
+        <h1>TabVault</h1>
+        <div class="sub">Window / Screen Recorder</div>
+      </div>
+      <strong id="status">Ready</strong>
+    </header>
+
+    <section class="card">
+      <div class="label">Recording source</div>
+      <div id="sourceTitle" class="title">Preparing…</div>
+      <div id="sourceUrl" class="footnote"></div>
+    </section>
+
+    <section id="readyCard" class="card">
+      <p>
+        This controller stays open while Chrome's sharing picker is shown, so the
+        recording can be started and stopped reliably.
+      </p>
+      <button id="chooseButton" type="button">Choose window / screen</button>
+      <p class="footnote">
+        Chrome will ask you which window or screen to share. TabVault never selects one silently.
+      </p>
+    </section>
+
+    <section id="recordingCard" class="card hidden">
+      <div class="recording-banner">● RECORDING</div>
+      <div id="elapsed" class="elapsed">00:00:00</div>
+      <div class="row">
+        <span>Video</span>
+        <strong id="videoState">Active</strong>
+      </div>
+      <div class="row">
+        <span>Audio</span>
+        <strong id="audioState">Checking…</strong>
+      </div>
+      <div class="actions">
+        <button id="pauseButton" class="secondary" type="button">Pause</button>
+        <button id="stopButton" type="button">Stop and save</button>
+      </div>
+      <p class="footnote">
+        You may close this controller after recording starts. The recording continues in TabVault and can also be stopped from the main extension popup.
+      </p>
+    </section>
+
+    <div id="message" class="message hidden" role="status"></div>
+  </main>
+  <script src="display-controller.js"></script>
+</body>
+</html>
