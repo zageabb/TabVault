@@ -280,29 +280,6 @@ async function removeRecording(sessionId) {
   await writeState({ recordings });
 }
 
-function chooseDesktopSource() {
-  return new Promise((resolve, reject) => {
-    try {
-      chrome.desktopCapture.chooseDesktopMedia(
-        ["window", "screen", "audio"],
-        (streamId, options = {}) => {
-          if (!streamId) {
-            reject(new Error("Window / screen selection was cancelled."));
-            return;
-          }
-
-          resolve({
-            streamId,
-            canRequestAudioTrack: Boolean(options.canRequestAudioTrack)
-          });
-        }
-      );
-    } catch (error) {
-      reject(error);
-    }
-  });
-}
-
 async function startCapture(message) {
   const current = await readState();
 
@@ -332,9 +309,12 @@ async function startCapture(message) {
   let canRequestAudioTrack = true;
 
   if (captureMode === "display") {
-    const desktop = await chooseDesktopSource();
-    streamId = desktop.streamId;
-    canRequestAudioTrack = desktop.canRequestAudioTrack;
+    if (!message.desktopStreamId) {
+      throw new Error("No window / screen source was selected.");
+    }
+
+    streamId = message.desktopStreamId;
+    canRequestAudioTrack = Boolean(message.canRequestAudioTrack);
   } else {
     streamId = await chrome.tabCapture.getMediaStreamId({
       targetTabId: message.tabId
