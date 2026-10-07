@@ -392,6 +392,21 @@ Evidence:
 - User runtime verification on 2026-10-07 confirmed the persistent Window / Screen controller starts successfully, remains visible, shows recording state and controls, updates the toolbar/main popup, saves output correctly, and resolves the original native-dropdown capture case.
 - DEV-016 complete.
 
+### DEV-017 — Seekable long WebM finalisation
+**Status:** In progress
+
+**Problem:**
+- Long recordings contain the later media data and continue playing beyond the apparent end, but the browser seek bar may expose only the first ~30–40 seconds.
+- The current finaliser concatenates persisted MediaRecorder chunks into a Blob without repairing WebM duration metadata.
+
+**Acceptance criteria:**
+- Preserve 5-second IndexedDB chunk persistence and interrupted-recording recovery.
+- Before download, repair WebM Info/Duration metadata using the effective recorded duration.
+- Apply the same repair to tab recordings, Window / Screen recordings, and recovered recordings.
+- Paused time must not be counted in normal completed-recording duration metadata.
+- If a WebM cannot be parsed safely, preserve the original recording rather than failing or corrupting it.
+- Add automated coverage for duration insertion/replacement and non-WebM/fallback safety.
+
 ## Later Ideas
 
 - Recording markers/bookmarks.
