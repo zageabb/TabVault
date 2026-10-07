@@ -13,6 +13,25 @@ const CHUNKS_STORE = "chunks";
 const SESSIONS_STORE = "sessions";
 const CHUNK_TIMESLICE_MS = 5000;
 
+const QUALITY_PROFILES = {
+  standard: {
+    id: "standard",
+    label: "Standard",
+    videoBitsPerSecond: 4_000_000,
+    audioBitsPerSecond: 128_000
+  },
+  high: {
+    id: "high",
+    label: "High",
+    videoBitsPerSecond: 8_000_000,
+    audioBitsPerSecond: 192_000
+  }
+};
+
+function resolveQualityProfile(profileId) {
+  return QUALITY_PROFILES[profileId] || QUALITY_PROFILES.standard;
+}
+
 function chooseMimeType() {
   const candidates = [
     "video/webm;codecs=vp9,opus",
@@ -463,9 +482,17 @@ function resumeMediaRecorder() {
 
 async function startMediaRecorder(stream, meta) {
   const mimeType = chooseMimeType();
-  const options = mimeType ? { mimeType } : undefined;
+  const quality = resolveQualityProfile(meta.qualityProfile);
+  const options = {
+    ...(mimeType ? { mimeType } : {}),
+    videoBitsPerSecond: quality.videoBitsPerSecond,
+    audioBitsPerSecond: quality.audioBitsPerSecond
+  };
 
-  recordingMeta = meta;
+  recordingMeta = {
+    ...meta,
+    qualityProfile: quality.id
+  };
   chunkWriteChain = Promise.resolve();
   activeSessionId = await createPersistedSession(
     meta,
@@ -495,7 +522,13 @@ async function startMediaRecorder(stream, meta) {
     mimeType: mediaRecorder.mimeType || mimeType || "video/webm",
     persistence: "indexeddb",
     chunkIntervalMs: CHUNK_TIMESLICE_MS,
-    sessionId: activeSessionId
+    sessionId: activeSessionId,
+    quality: {
+      id: quality.id,
+      label: quality.label,
+      videoBitsPerSecond: mediaRecorder.videoBitsPerSecond || quality.videoBitsPerSecond,
+      audioBitsPerSecond: mediaRecorder.audioBitsPerSecond || quality.audioBitsPerSecond
+    }
   };
 }
 
@@ -565,6 +598,7 @@ async function startStream(streamId, tabId, meta = {}, playbackEnabled = true) {
   const recorder = await startMediaRecorder(captureStream, {
     title: meta.title,
     sourceType: meta.sourceType,
+    qualityProfile: meta.qualityProfile,
     startedAt: meta.startedAt || Date.now()
   });
 
