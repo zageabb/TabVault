@@ -83,6 +83,19 @@
       </p>
     </section>
 
+    <section class="card">
+      <div class="label">Save settings</div>
+      <label class="stacked-field" for="destinationFolder">
+        <span>Downloads folder</span>
+        <input id="destinationFolder" type="text" value="TabVault" placeholder="TabVault">
+      </label>
+      <label class="stacked-field" for="filenameTemplate">
+        <span>Filename template</span>
+        <input id="filenameTemplate" type="text" value="{title} - {date}" placeholder="{title} - {date}">
+      </label>
+      <p class="footnote">Tokens: {title}, {date}, {time}, {source}. Files save under Downloads/your-folder.</p>
+    </section>
+
     <section id="historyCard" class="card hidden">
       <div class="history-header">
         <div class="label">Recent recordings</div>
