@@ -8,12 +8,27 @@ const OFFSCREEN_DOCUMENT_PATH = "src/recorder/recorder.html";
 
 const HISTORY_LIMIT = 50;
 
+const DEFAULT_SETTINGS = {
+  destinationFolder: "TabVault",
+  filenameTemplate: "{title} - {date}"
+};
+
 async function readState() {
   const stored = await chrome.storage.local.get("tabVault");
-  return stored.tabVault || {
+  const state = stored.tabVault || {
     version: chrome.runtime.getManifest().version,
     recording: null,
-    history: []
+    history: [],
+    settings: DEFAULT_SETTINGS
+  };
+
+  return {
+    ...state,
+    history: Array.isArray(state.history) ? state.history : [],
+    settings: {
+      ...DEFAULT_SETTINGS,
+      ...(state.settings || {})
+    }
   };
 }
 
@@ -257,6 +272,8 @@ async function startCapture(message) {
       title: message.title || "Untitled tab",
       sourceType: message.sourceType || SOURCE_TYPES.GENERIC,
       qualityProfile: message.qualityProfile || "standard",
+      filenameTemplate: message.filenameTemplate || current.settings?.filenameTemplate || DEFAULT_SETTINGS.filenameTemplate,
+      destinationFolder: message.destinationFolder || current.settings?.destinationFolder || DEFAULT_SETTINGS.destinationFolder,
       startedAt
     }
   });
@@ -407,7 +424,11 @@ chrome.runtime.onInstalled.addListener(async () => {
       ...current,
       version: chrome.runtime.getManifest().version,
       recording: null,
-      history: Array.isArray(current.history) ? current.history : []
+      history: Array.isArray(current.history) ? current.history : [],
+      settings: {
+        ...DEFAULT_SETTINGS,
+        ...(current.settings || {})
+      }
     }
   });
   await updateBadge(null);
@@ -488,6 +509,35 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         }
       }))
       .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  if (message?.type === "TABVAULT_SAVE_SETTINGS") {
+    readState()
+      .then((state) => chrome.storage.local.set({
+        tabVault: {
+          ...state,
+          settings: {
+            ...state.settings,
+            destinationFolder: String(message.destinationFolder || DEFAULT_SETTINGS.destinationFolder),
+            filenameTemplate: String(message.filenameTemplate || DEFAULT_SETTINGS.filenameTemplate)
+          }
+        }
+      }))
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  if (message?.type === "TABVAULT_DOWNLOAD_BLOB") {
+    chrome.downloads.download({
+      url: message.blobUrl,
+      filename: message.filename,
+      saveAs: false,
+      conflictAction: "uniquify"
+    })
+      .then((downloadId) => sendResponse({ ok: true, downloadId }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }
