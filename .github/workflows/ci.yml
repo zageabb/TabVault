@@ -18,3 +18,5 @@ jobs:
       - name: Syntax-check JavaScript
         run: |
           find src -name '*.js' -print0 | xargs -0 -n1 node --check
+      - name: Test WebM duration repair
+        run: node tests/webm-duration.test.js
