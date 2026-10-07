@@ -287,7 +287,7 @@ Evidence:
 - DEV-013 complete.
 
 ### DEV-014 — Destination and naming
-**Status:** Implemented — browser runtime verification pending
+**Status:** Complete
 
 Acceptance criteria:
 - Default save path under Downloads/TabVault where browser policy allows.
@@ -303,11 +303,12 @@ Evidence:
 - Filename and folder segments are sanitized for illegal path characters and traversal-like segments are removed.
 - Browser download conflict handling uses "uniquify" to avoid silently overwriting an existing file.
 - Destination/template settings are persisted in chrome.storage.local and are also stored with interrupted sessions so recovery uses the original naming configuration.
-- Browser runtime verification of subfolder placement, template expansion, and recovery naming is pending.
+- User runtime verification on 2026-10-07 confirmed subfolder placement and filename-template expansion work as expected.
+- DEV-014 complete.
 
 
 ### DEV-015 — Parallel recording sessions
-**Status:** Not started
+**Status:** Implemented — browser runtime verification pending
 
 **Rationale / sequencing:**
 - Add only after the single-session recording pipeline, chunk persistence, recovery, history, quality, and destination handling are stable.
@@ -330,12 +331,21 @@ Evidence:
 - Validate parallel recording with at least two simultaneous tabs, including independent stop order and successful playable output from both.
 - Performance validation should record CPU/memory/storage behaviour for two and three concurrent 1080p-class sources where practical.
 
-**Likely implementation shape:**
-- Replace the current singleton active-capture state with a recording-session registry keyed by session ID.
-- Keep one independent MediaRecorder/capture context per session.
-- Treat the service worker as the coordinator; recording lifetime must not depend on popup lifetime or on the service worker remaining continuously awake.
-- Extend popup UI from a single active recorder to an active-recordings list with per-session controls.
-- Reuse DEV-010 chunk persistence and DEV-011 recovery primitives per session rather than introducing a separate multi-session storage path.
+**Implementation evidence:**
+- Service-worker state now stores an independent recordings array and migrates legacy single-recording state when read.
+- Each capture receives a unique session ID before the tab stream is opened.
+- The offscreen recorder now maintains a Map of independent session objects, each with its own MediaStream, MediaRecorder, audio passthrough context, chunk-write chain, persisted session metadata, and stop/pause state.
+- Starting one session no longer stops or replaces another session.
+- Pause, resume, stop, and local-speaker playback messages are addressed by session ID.
+- Popup now includes an Active recordings panel with independent Open tab, Pause/Resume, Stop, and speaker-playback controls for every session.
+- The current tab retains simple Start/Stop/Pause controls while other sessions continue in the background.
+- Toolbar badge shows REC for one capture, II for one paused capture, a numeric count for multiple captures, and ! if any active session reports an error.
+- Duplicate capture of the same tab is rejected cleanly.
+- A hard concurrency limit of 3 active recordings is enforced before any existing recording is disturbed.
+- IndexedDB chunks remain isolated by session ID; recoverable-session listing filters out sessions that are still live.
+- SharePoint playback events are routed back to the matching session by sender tab ID.
+- Recording history continues to be written independently for each completed session.
+- Browser runtime validation with two and three simultaneous tabs, independent stop order, and playable output is pending.
 
 
 ### DEV-016 — Window / screen capture mode
