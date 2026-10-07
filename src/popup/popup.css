@@ -212,3 +212,16 @@ button.secondary {
   min-width: 110px;
   padding: 4px 6px;
 }
+
+
+.stacked-field {
+  display: grid;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+.stacked-field input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+}
