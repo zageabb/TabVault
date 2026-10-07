@@ -266,7 +266,7 @@ Evidence:
 - DEV-012 complete.
 
 ### DEV-013 — Quality profiles
-**Status:** Implemented — browser runtime verification pending
+**Status:** Complete
 
 Acceptance criteria:
 - Standard and High presets.
@@ -281,15 +281,27 @@ Evidence:
 - Chrome's actual MediaRecorder bitrates are returned in active recorder metadata where exposed by the browser.
 - The selected quality profile is locked while a recording is active so bitrate does not change mid-session.
 - Tab capture resolution constraints are unchanged, preserving the source tab resolution/frame rate where Chrome provides it.
-- Browser runtime verification of both presets and resulting saved files is pending.
+- User runtime verification on 2026-10-07 confirmed both Standard and High profiles produce valid recordings and High produces the expected larger output.
+- DEV-013 complete.
 
 ### DEV-014 — Destination and naming
-**Status:** Not started
+**Status:** Implemented — browser runtime verification pending
 
 Acceptance criteria:
 - Default save path under Downloads/TabVault where browser policy allows.
 - Configurable filename template.
 - Sanitize illegal filename characters.
+
+Evidence:
+- Added the Chrome downloads permission and switched finalized/recovered files to chrome.downloads.download.
+- Default destination is Downloads/TabVault.
+- Popup exposes a persistent Downloads folder field and filename-template field.
+- Supported filename tokens are {title}, {date}, {time}, and {source}.
+- Default template is "{title} - {date}".
+- Filename and folder segments are sanitized for illegal path characters and traversal-like segments are removed.
+- Browser download conflict handling uses "uniquify" to avoid silently overwriting an existing file.
+- Destination/template settings are persisted in chrome.storage.local and are also stored with interrupted sessions so recovery uses the original naming configuration.
+- Browser runtime verification of subfolder placement, template expansion, and recovery naming is pending.
 
 
 ### DEV-015 — Parallel recording sessions
