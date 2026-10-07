@@ -321,8 +321,17 @@ async function recoverPersistedSession(sessionId) {
   }
 
   const mimeType = session.mimeType || "video/webm";
-  const blob = new Blob(chunks, { type: mimeType });
-  if (blob.size <= 0) throw new Error("Recovered recording is empty.");
+  const rawBlob = new Blob(chunks, { type: mimeType });
+  if (rawBlob.size <= 0) throw new Error("Recovered recording is empty.");
+
+  const estimatedDurationMs = Math.max(
+    CHUNK_TIMESLICE_MS,
+    Number(session.updatedAt || Date.now()) - Number(session.startedAt || Date.now())
+  );
+  const blob = await globalThis.TabVaultWebm.repairWebmDuration(
+    rawBlob,
+    estimatedDurationMs
+  );
 
   const filename = buildFilename(session);
   await downloadBlob(blob, filename);
@@ -466,7 +475,19 @@ async function finalizeRecorder(session, save = true) {
 
         const mimeType = recorder.mimeType || chooseMimeType() || "video/webm";
         const chunks = await readPersistedChunks(session.sessionId);
-        const blob = new Blob(chunks, { type: mimeType });
+        const rawBlob = new Blob(chunks, { type: mimeType });
+        const now = Date.now();
+        const livePauseMs = session.pauseStartedAt
+          ? Math.max(0, now - session.pauseStartedAt)
+          : 0;
+        const durationMs = Math.max(
+          1,
+          now - session.recordingStartedAt - session.totalPausedMs - livePauseMs
+        );
+        const blob = await globalThis.TabVaultWebm.repairWebmDuration(
+          rawBlob,
+          durationMs
+        );
         const filename = buildFilename(session.meta);
 
         if (save && blob.size > 0) {
@@ -523,6 +544,7 @@ function pauseSession(sessionId) {
   if (!session.mediaRecorder || session.mediaRecorder.state !== "recording") {
     return false;
   }
+  session.pauseStartedAt = Date.now();
   session.mediaRecorder.pause();
   return true;
 }
@@ -531,6 +553,10 @@ function resumeSession(sessionId) {
   const session = getActiveSession(sessionId);
   if (!session.mediaRecorder || session.mediaRecorder.state !== "paused") {
     return false;
+  }
+  if (session.pauseStartedAt) {
+    session.totalPausedMs += Math.max(0, Date.now() - session.pauseStartedAt);
+    session.pauseStartedAt = null;
   }
   session.mediaRecorder.resume();
   return true;
@@ -585,6 +611,9 @@ async function startSession({
     audioContext: null,
     mediaRecorder: null,
     chunkWriteChain: Promise.resolve(),
+    recordingStartedAt: Date.now(),
+    totalPausedMs: 0,
+    pauseStartedAt: null,
     localPlaybackEnabled: Boolean(localPlaybackEnabled),
     meta: {
       ...meta,
