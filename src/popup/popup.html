@@ -31,6 +31,13 @@
         <span>Tab audio</span>
         <strong id="audioStatus">Ready</strong>
       </div>
+      <label id="captureModeRow" class="row hidden" for="captureMode">
+        <span>Capture source</span>
+        <select id="captureMode">
+          <option value="tab" selected>Tab</option>
+          <option value="display">Window / Screen</option>
+        </select>
+      </label>
       <label class="row" for="qualityProfile">
         <span>Quality</span>
         <select id="qualityProfile">
@@ -94,6 +101,9 @@
         <input id="filenameTemplate" type="text" value="{title} - {date}" placeholder="{title} - {date}">
       </label>
       <p class="footnote">Tokens: {title}, {date}, {time}, {source}. Files save under Downloads/your-folder.</p>
+      <p id="captureModeHint" class="footnote hidden">
+        Window / Screen opens Chrome's sharing picker and can include native dropdowns and other compositor UI that tab capture may miss.
+      </p>
     </section>
 
     <section id="historyCard" class="card hidden">
