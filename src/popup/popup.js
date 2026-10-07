@@ -634,9 +634,47 @@ async function refreshState() {
   renderHistory(state.history);
 }
 
+function chooseDesktopSourceFromPopup() {
+  return new Promise((resolve, reject) => {
+    try {
+      chrome.desktopCapture.chooseDesktopMedia(
+        ["window", "screen", "audio"],
+        (streamId, options = {}) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+            return;
+          }
+
+          if (!streamId) {
+            reject(new Error("Window / screen selection was cancelled."));
+            return;
+          }
+
+          resolve({
+            streamId,
+            canRequestAudioTrack: Boolean(options.canRequestAudioTrack)
+          });
+        }
+      );
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
 async function startCapture() {
   if (!activeTab?.id) {
     throw new Error("No active tab is available to capture.");
+  }
+
+  const captureMode = activeSource.type === "generic"
+    ? document.getElementById("captureMode").value
+    : "tab";
+
+  let desktopSelection = null;
+
+  if (captureMode === "display") {
+    desktopSelection = await chooseDesktopSourceFromPopup();
   }
 
   const response = await chrome.runtime.sendMessage({
@@ -645,9 +683,9 @@ async function startCapture() {
     title: activeSource.title || activeTab.title,
     url: activeTab.url,
     sourceType: activeSource.type,
-    captureMode: activeSource.type === "generic"
-      ? document.getElementById("captureMode").value
-      : "tab",
+    captureMode,
+    desktopStreamId: desktopSelection?.streamId || null,
+    canRequestAudioTrack: desktopSelection?.canRequestAudioTrack || false,
     qualityProfile: document.getElementById("qualityProfile").value,
     destinationFolder: document.getElementById("destinationFolder").value,
     filenameTemplate: document.getElementById("filenameTemplate").value,
