@@ -10,7 +10,9 @@ const MAX_CONCURRENT_RECORDINGS = 3;
 
 const DEFAULT_SETTINGS = {
   destinationFolder: "TabVault",
-  filenameTemplate: "{title} - {date}"
+  filenameTemplate: "{title} - {date}",
+  autoLowCpu: false,
+  teamsPriority: false
 };
 
 function normalizeRecordings(state) {
@@ -742,7 +744,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               ),
               filenameTemplate: String(
                 message.filenameTemplate || DEFAULT_SETTINGS.filenameTemplate
-              )
+              ),
+              autoLowCpu: Boolean(message.autoLowCpu),
+              teamsPriority: Boolean(message.teamsPriority)
             }
           }
         })
