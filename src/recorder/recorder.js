@@ -18,6 +18,24 @@ const QUALITY_PROFILES = {
     label: "High",
     videoBitsPerSecond: 8_000_000,
     audioBitsPerSecond: 192_000
+  },
+  low: {
+    id: "low",
+    label: "Low CPU",
+    maxWidth: 1280,
+    maxHeight: 720,
+    maxFrameRate: 10,
+    videoBitsPerSecond: 1_000_000,
+    audioBitsPerSecond: 128_000
+  },
+  minimal: {
+    id: "minimal",
+    label: "Minimal",
+    maxWidth: 854,
+    maxHeight: 480,
+    maxFrameRate: 5,
+    videoBitsPerSecond: 400_000,
+    audioBitsPerSecond: 96_000
   }
 };
 
@@ -25,8 +43,11 @@ function resolveQualityProfile(profileId) {
   return QUALITY_PROFILES[profileId] || QUALITY_PROFILES.standard;
 }
 
-function chooseMimeType() {
-  const candidates = [
+function chooseMimeType(profileId = "standard") {
+  const lowLoad = profileId === "low" || profileId === "minimal";
+  const candidates = lowLoad
+    ? ["video/webm;codecs=vp8,opus", "video/webm;codecs=vp9,opus", "video/webm"]
+    : [
     "video/webm;codecs=vp9,opus",
     "video/webm;codecs=vp8,opus",
     "video/webm"
@@ -404,8 +425,8 @@ async function setLocalPlayback(sessionId, enabled) {
 }
 
 async function startMediaRecorder(session) {
-  const mimeType = chooseMimeType();
   const quality = resolveQualityProfile(session.meta.qualityProfile);
+  const mimeType = chooseMimeType(quality.id);
   const options = {
     ...(mimeType ? { mimeType } : {}),
     videoBitsPerSecond: quality.videoBitsPerSecond,
@@ -586,15 +607,33 @@ async function startSession({
       }
     : false;
 
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: {
-      mandatory: {
-        chromeMediaSource,
-        chromeMediaSourceId: streamId
+  const quality = resolveQualityProfile(meta.qualityProfile);
+  const sourceMandatory = { chromeMediaSource, chromeMediaSourceId: streamId };
+  const constrainedMandatory = quality.maxWidth
+    ? {
+        ...sourceMandatory,
+        maxWidth: quality.maxWidth,
+        maxHeight: quality.maxHeight,
+        maxFrameRate: quality.maxFrameRate
       }
-    },
-    audio: audioConstraint
-  });
+    : sourceMandatory;
+  let captureConstraintFallback = false;
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { mandatory: constrainedMandatory },
+      audio: audioConstraint
+    });
+  } catch (error) {
+    // Fall back to unbounded capture only if the browser rejected low-load limits.
+    // Other capture failures should retain their original diagnostic.
+    if (!quality.maxWidth || !["OverconstrainedError", "ConstraintNotSatisfiedError", "TypeError"].includes(error?.name)) throw error;
+    captureConstraintFallback = true;
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { mandatory: sourceMandatory },
+      audio: audioConstraint
+    });
+  }
 
   const videoTrack = stream.getVideoTracks()[0];
   const audioTrack = stream.getAudioTracks()[0];
@@ -639,7 +678,16 @@ async function startSession({
       video: {
         width: videoSettings.width || null,
         height: videoSettings.height || null,
-        frameRate: videoSettings.frameRate || null
+        frameRate: videoSettings.frameRate || null,
+        requestedMaxWidth: quality.maxWidth || null,
+        requestedMaxHeight: quality.maxHeight || null,
+        requestedMaxFrameRate: quality.maxFrameRate || null,
+        constraintFallback: captureConstraintFallback,
+        constraintsMet: !quality.maxWidth || (
+          Number(videoSettings.width) <= quality.maxWidth &&
+          Number(videoSettings.height) <= quality.maxHeight &&
+          Number(videoSettings.frameRate) <= quality.maxFrameRate
+        )
       },
       audio: {
         available: Boolean(audioTrack),
