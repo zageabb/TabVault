@@ -25,6 +25,7 @@ let config = null;
 let recording = null;
 let captureStream = null;
 let mediaRecorder = null;
+let audioMix = null;
 let chunkWriteChain = Promise.resolve();
 let elapsedTimer = null;
 let stopping = false;
@@ -383,6 +384,7 @@ async function startRecording() {
 
     const videoTrack = captureStream.getVideoTracks()[0];
     const audioTrack = captureStream.getAudioTracks()[0];
+    audioMix = await globalThis.TabVaultAudio.prepare(captureStream, document.getElementById("recordMicrophone").checked);
 
     if (!videoTrack) {
       throw new Error("Chrome did not provide a video track for the selected surface.");
@@ -422,7 +424,8 @@ async function startRecording() {
       filenameTemplate: config.filenameTemplate,
       destinationFolder: config.destinationFolder,
       audio: {
-        available: Boolean(audioTrack),
+        available: Boolean(audioTrack) || Boolean(audioMix.microphone),
+        microphone: Boolean(audioMix.microphone),
         localPlayback: false
       },
       video: {
@@ -446,7 +449,7 @@ async function startRecording() {
     chunkWriteChain = Promise.resolve();
     let chunkIndex = 0;
 
-    mediaRecorder = new MediaRecorder(captureStream, {
+    mediaRecorder = new MediaRecorder(audioMix.stream, {
       ...(mimeType ? { mimeType } : {}),
       videoBitsPerSecond: quality.videoBitsPerSecond,
       audioBitsPerSecond: quality.audioBitsPerSecond
@@ -504,11 +507,15 @@ async function startRecording() {
     if (captureStream) {
       for (const track of captureStream.getTracks()) track.stop();
     }
+    await audioMix?.cleanup();
+    audioMix = null;
     if (recording?.sessionId) {
       await deletePersistedSession(recording.sessionId).catch(() => {});
     }
     mediaRecorder = null;
     captureStream = null;
+    await audioMix?.cleanup();
+    audioMix = null;
     recording = null;
     setMessage(`${error.name ? error.name + ": " : ""}${error.message}`);
     chooseButton.disabled = false;
