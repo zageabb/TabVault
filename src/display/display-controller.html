@@ -27,7 +27,7 @@
         This controller stays open while Chrome's sharing picker is shown, so the
         recording can be started and stopped reliably.
       </p>
-      <button id="chooseButton" type="button">Choose window / screen</button>
+      <label class="row"><span>Record microphone</span><input id="recordMicrophone" type="checkbox"></label><p class="footnote">Microphone audio is mixed into the saved recording. Chrome may ask for microphone access.</p><button id="chooseButton" type="button">Choose window / screen</button>
       <p class="footnote">
         Chrome will ask you which window or screen to share. TabVault never selects one silently.
       </p>
@@ -55,6 +55,6 @@
 
     <div id="message" class="message hidden" role="status"></div>
   </main>
-  <script src="../shared/webm-duration.js"></script>\n  <script src="display-controller.js"></script>
+  <script src="../shared/webm-duration.js"></script>\n  <script src="../shared/audio-mixer.js"></script><script src="display-controller.js"></script>
 </body>
 </html>
