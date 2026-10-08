@@ -525,6 +525,7 @@ function renderCurrentTabState() {
   const audioStatus = document.getElementById("audioStatus");
   const localPlayback = document.getElementById("localPlayback");
   const qualityProfile = document.getElementById("qualityProfile");
+  const micToggle = document.getElementById("recordMicrophone");
   const captureMode = document.getElementById("captureMode");
   const captureModeRow = document.getElementById("captureModeRow");
   const captureModeHint = document.getElementById("captureModeHint");
@@ -573,11 +574,14 @@ function renderCurrentTabState() {
     localPlayback.checked = Boolean(currentRecording.localPlaybackEnabled);
     qualityProfile.value = currentRecording.qualityProfile || "standard";
     qualityProfile.disabled = true;
+    micToggle.checked = Boolean(currentRecording.audio?.microphone);
+    micToggle.disabled = true;
     captureMode.value = currentRecording.captureMode || "tab";
     captureMode.disabled = true;
   } else {
     localPlayback.checked = activeSource?.type !== "teams";
     qualityProfile.disabled = false;
+    micToggle.disabled = false;
     captureMode.disabled = !genericSource;
   }
 
@@ -674,7 +678,8 @@ function openDisplayController() {
     quality: effectiveQualityProfile(),
     folder: document.getElementById("destinationFolder").value,
     template: document.getElementById("filenameTemplate").value,
-    playback: document.getElementById("localPlayback").checked ? "1" : "0"
+    playback: document.getElementById("localPlayback").checked ? "1" : "0",
+    microphone: document.getElementById("recordMicrophone").checked ? "1" : "0"
   });
 
   const controllerUrl = chrome.runtime.getURL(
@@ -715,6 +720,7 @@ async function startCapture() {
     destinationFolder: document.getElementById("destinationFolder").value,
     filenameTemplate: document.getElementById("filenameTemplate").value,
     localPlaybackEnabled: document.getElementById("localPlayback").checked,
+    recordMicrophone: document.getElementById("recordMicrophone").checked,
     autoStopOnEnded: document.getElementById("autoStopOnEnded")?.checked ?? false,
     followPlayback: document.getElementById("followPlayback")?.checked ?? false
   });
