@@ -446,7 +446,7 @@ async function startMediaRecorder(session) {
   );
 
   let chunkIndex = 0;
-  const recorder = new MediaRecorder(session.stream, options);
+  const recorder = new MediaRecorder(session.recordStream, options);
   session.mediaRecorder = recorder;
 
   recorder.addEventListener("dataavailable", (event) => {
@@ -541,6 +541,7 @@ async function stopSession(sessionId, { notify = false, save = true } = {}) {
   const result = await finalizeRecorder(session, save);
 
   await stopAudioPassthrough(session);
+  await session.audioMix?.cleanup();
   for (const track of session.stream.getTracks()) {
     track.stop();
   }
@@ -590,7 +591,8 @@ async function startSession({
   meta = {},
   localPlaybackEnabled = true,
   captureMode = "tab",
-  canRequestAudioTrack = true
+  canRequestAudioTrack = true,
+  recordMicrophone = false
 }) {
   if (!sessionId) throw new Error("A recording session ID is required.");
   if (activeSessions.has(sessionId)) {
@@ -648,6 +650,8 @@ async function startSession({
     tabId,
     stream,
     audioContext: null,
+    audioMix: null,
+    recordStream: stream,
     mediaRecorder: null,
     chunkWriteChain: Promise.resolve(),
     recordingStartedAt: Date.now(),
@@ -672,6 +676,8 @@ async function startSession({
     const videoSettings = videoTrack.getSettings();
     const audioSettings = audioTrack?.getSettings?.() || {};
     const localPlayback = await startAudioPassthrough(session);
+    session.audioMix = await globalThis.TabVaultAudio.prepare(stream, recordMicrophone);
+    session.recordStream = session.audioMix.stream;
     const recorder = await startMediaRecorder(session);
 
     return {
@@ -693,13 +699,15 @@ async function startSession({
         available: Boolean(audioTrack),
         sampleRate: audioSettings.sampleRate || null,
         channelCount: audioSettings.channelCount || null,
-        localPlayback
+        localPlayback,
+        microphone: Boolean(session.audioMix?.microphone)
       },
       recorder
     };
   } catch (error) {
     activeSessions.delete(sessionId);
     await stopAudioPassthrough(session);
+    await session.audioMix?.cleanup();
     for (const track of stream.getTracks()) track.stop();
     await deletePersistedSession(sessionId).catch(() => {});
     throw error;
@@ -715,7 +723,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       meta: message.meta,
       localPlaybackEnabled: message.localPlaybackEnabled,
       captureMode: message.captureMode || "tab",
-      canRequestAudioTrack: message.canRequestAudioTrack !== false
+      canRequestAudioTrack: message.canRequestAudioTrack !== false,
+      recordMicrophone: Boolean(message.recordMicrophone)
     })
       .then((media) => sendResponse({ ok: true, ...media }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
