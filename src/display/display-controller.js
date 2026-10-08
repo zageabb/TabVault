@@ -16,7 +16,9 @@ const QUALITY_PROFILES = {
     label: "High",
     videoBitsPerSecond: 8_000_000,
     audioBitsPerSecond: 192_000
-  }
+  },
+  low: { id: "low", label: "Low CPU", maxWidth: 1280, maxHeight: 720, maxFrameRate: 10, videoBitsPerSecond: 1_000_000, audioBitsPerSecond: 128_000 },
+  minimal: { id: "minimal", label: "Minimal", maxWidth: 854, maxHeight: 480, maxFrameRate: 5, videoBitsPerSecond: 400_000, audioBitsPerSecond: 96_000 }
 };
 
 let config = null;
@@ -41,8 +43,10 @@ function resolveQualityProfile(profileId) {
   return QUALITY_PROFILES[profileId] || QUALITY_PROFILES.standard;
 }
 
-function chooseMimeType() {
-  const candidates = [
+function chooseMimeType(profileId = "standard") {
+  const candidates = ["low", "minimal"].includes(profileId)
+    ? ["video/webm;codecs=vp8,opus", "video/webm;codecs=vp9,opus", "video/webm"]
+    : [
     "video/webm;codecs=vp9,opus",
     "video/webm;codecs=vp8,opus",
     "video/webm"
@@ -387,7 +391,21 @@ async function startRecording() {
     const startedAt = Date.now();
     const sessionId = crypto.randomUUID();
     const quality = resolveQualityProfile(config.qualityProfile);
-    const mimeType = chooseMimeType();
+    let constraintFallback = false;
+    if (quality.maxWidth) {
+      try {
+        await videoTrack.applyConstraints({
+          width: { max: quality.maxWidth },
+          height: { max: quality.maxHeight },
+          frameRate: { max: quality.maxFrameRate }
+        });
+      } catch {
+        // The display-picker selection must not be reopened automatically.
+        // Retain the selected stream and expose actual settings to the caller.
+        constraintFallback = true;
+      }
+    }
+    const mimeType = chooseMimeType(quality.id);
 
     recording = {
       sessionId,
@@ -410,7 +428,16 @@ async function startRecording() {
       video: {
         width: videoTrack.getSettings().width || null,
         height: videoTrack.getSettings().height || null,
-        frameRate: videoTrack.getSettings().frameRate || null
+        frameRate: videoTrack.getSettings().frameRate || null,
+        requestedMaxWidth: quality.maxWidth || null,
+        requestedMaxHeight: quality.maxHeight || null,
+        requestedMaxFrameRate: quality.maxFrameRate || null,
+        constraintFallback,
+        constraintsMet: !quality.maxWidth || (
+          Number(videoTrack.getSettings().width) <= quality.maxWidth &&
+          Number(videoTrack.getSettings().height) <= quality.maxHeight &&
+          Number(videoTrack.getSettings().frameRate) <= quality.maxFrameRate
+        )
       }
     };
 

@@ -418,6 +418,26 @@ Evidence:
 - GitHub Actions run 37610534011 passed on commit c4b6a1e3757c1dcd0495c0768596ad01e3ebc658.
 - Remaining validation: record a multi-minute/long video in Chrome and confirm the saved player's seek bar exposes the full duration and can jump forward before playback reaches that point.
 
+### DEV-018 — Low-load recording quality and Teams coexistence
+**Status:** In progress — Phases 1–2 implemented; validation pending
+
+**Problem:** Standard (4 Mbps) and High (8 Mbps) only change the requested encoder bitrate, retaining full source dimensions and frame rate. Multiple concurrent recordings can compete with Teams for CPU/GPU capacity.
+
+**Delivery order:**
+1. **Phase 1 — explicit low-load profiles:** Add Low CPU (max 1280x720, 10 FPS, 1 Mbps video, 128 kbps audio) and Minimal (max 854x480, 5 FPS, 400 kbps video, 96 kbps audio); retain Standard/High unchanged. Apply dimension/frame caps to Chrome tab capture, prefer VP8 for low-load encoding, report actual track settings and browser-selected bitrates. Expose profiles in the popup and retain a safe fallback if a browser refuses constraints.
+2. **Phase 2 — Window / Screen parity:** Apply the same selectable profiles to the persistent display controller's media pipeline and verify native dropdown capture remains intact.
+3. **Phase 3 — automatic coexistence:** Add opt-in automatic selection of Low CPU for second/subsequent recordings and a Teams-priority mode; never silently alter an already running MediaRecorder or a user's explicitly selected High profile.
+4. **Phase 4 — instrumentation and validation:** Report actual FPS/dimensions/codec; show dropped frames only where measurable, benchmark 1/2/3 simultaneous sources with Teams running, check saved WebM playback and seeking, recovery, audio, independent stop/pause order, and CPU/memory/storage impact.
+
+**Acceptance criteria:**
+- Low CPU and Minimal produce playable WebM with audio and materially fewer requested video frames/pixels than Standard.
+- Capture dimensions and FPS are verified from actual track settings, not inferred solely from the selected preset; any unsuccessful constraint is displayed rather than claimed as applied.
+- Existing Standard/High and interrupted-recording recovery are not regressed.
+- Each session can use a different quality profile.
+- CI and real Chrome/Teams runtime validation must pass before marking DEV-018 Complete.
+
+**Implementation evidence (2026-10-08):** Added Low CPU and Minimal options in popup, quality-dependent capture constraints for tab video, and actual/requested capture settings in returned recording metadata. Updated the persistent Window / Screen controller to request lower dimensions/FPS via the selected display track's applyConstraints, preserve the picked stream if constraints fail, and report the effective settings. Low-load profiles prefer VP8 before VP9 where supported. Standard and High presets remain unchanged. **Still pending:** automatic selection and Teams-priority mode, user-visible capture constraint warnings, actual FPS/drop monitoring, browser runtime quality verification, performance benchmarks, and full regression testing.
+
 ## Later Ideas
 
 - Recording markers/bookmarks.
