@@ -115,6 +115,7 @@ const MAX_CONCURRENT_RECORDINGS = 3;
 let activeTab = null;
 let activeSource = null;
 let recordings = [];
+let performanceSettings = { autoLowCpu: false, teamsPriority: false };
 let currentRecording = null;
 let elapsedTimer = null;
 
@@ -631,8 +632,31 @@ async function refreshState() {
       ? [state.recording]
       : [];
 
+  performanceSettings = { autoLowCpu: Boolean(state.settings?.autoLowCpu), teamsPriority: Boolean(state.settings?.teamsPriority) };
+  document.getElementById("autoLowCpu").checked = performanceSettings.autoLowCpu;
+  document.getElementById("teamsPriority").checked = performanceSettings.teamsPriority;
   renderCurrentTabState();
+  renderQualityHint();
   renderHistory(state.history);
+}
+
+function effectiveQualityProfile() {
+  const selected = document.getElementById("qualityProfile").value;
+  if (selected !== "standard") return selected; // Explicit nonstandard choices win.
+  const existingTeams = recordings.some((item) => item.sourceType === "teams");
+  if (performanceSettings.teamsPriority && (activeSource?.type === "teams" || existingTeams)) return "low";
+  if (performanceSettings.autoLowCpu && recordings.length > 0) return "low";
+  return selected;
+}
+
+function renderQualityHint() {
+  const node = document.getElementById("qualityHint");
+  if (!node) return;
+  const selected = document.getElementById("qualityProfile").value;
+  const effective = effectiveQualityProfile();
+  node.textContent = effective !== selected
+    ? `Next recording: ${effective === "low" ? "Low CPU (720p / 10 FPS)" : effective}. Existing recordings stay unchanged.`
+    : "Manual presets remain available. Auto modes affect only new recordings when Standard is selected.";
 }
 
 function openDisplayController() {
@@ -640,7 +664,7 @@ function openDisplayController() {
     tabId: String(activeTab.id),
     title: activeSource.title || activeTab.title || "Window / Screen recording",
     url: activeTab.url || "",
-    quality: document.getElementById("qualityProfile").value,
+    quality: effectiveQualityProfile(),
     folder: document.getElementById("destinationFolder").value,
     template: document.getElementById("filenameTemplate").value,
     playback: document.getElementById("localPlayback").checked ? "1" : "0"
@@ -680,7 +704,7 @@ async function startCapture() {
     captureMode: "tab",
     desktopStreamId: null,
     canRequestAudioTrack: false,
-    qualityProfile: document.getElementById("qualityProfile").value,
+    qualityProfile: effectiveQualityProfile(),
     destinationFolder: document.getElementById("destinationFolder").value,
     filenameTemplate: document.getElementById("filenameTemplate").value,
     localPlaybackEnabled: document.getElementById("localPlayback").checked,
@@ -736,6 +760,9 @@ async function init() {
   captureModeHint.classList.toggle("hidden", true);
 
   const state = await getState();
+  performanceSettings = { autoLowCpu: Boolean(state.settings?.autoLowCpu), teamsPriority: Boolean(state.settings?.teamsPriority) };
+  document.getElementById("autoLowCpu").checked = performanceSettings.autoLowCpu;
+  document.getElementById("teamsPriority").checked = performanceSettings.teamsPriority;
   destinationFolder.value = state.settings?.destinationFolder || "TabVault";
   filenameTemplate.value = state.settings?.filenameTemplate || "{title} - {date}";
   recordings = Array.isArray(state.recordings)
@@ -745,6 +772,7 @@ async function init() {
       : [];
 
   renderCurrentTabState();
+  renderQualityHint();
   renderHistory(state.history);
 
   try {
@@ -766,12 +794,23 @@ async function init() {
     const response = await chrome.runtime.sendMessage({
       type: "TABVAULT_SAVE_SETTINGS",
       destinationFolder: destinationFolder.value,
-      filenameTemplate: filenameTemplate.value
+      filenameTemplate: filenameTemplate.value,
+      autoLowCpu: performanceSettings.autoLowCpu,
+      teamsPriority: performanceSettings.teamsPriority
     });
     if (!response?.ok) {
       throw new Error(response?.error || "Unable to save settings.");
     }
   };
+
+  for (const id of ["autoLowCpu", "teamsPriority"]) {
+    document.getElementById(id).addEventListener("change", () => {
+      performanceSettings[id] = document.getElementById(id).checked;
+      renderQualityHint();
+      saveSettings().catch((error) => setError(error.message));
+    });
+  }
+  document.getElementById("qualityProfile").addEventListener("change", renderQualityHint);
 
   destinationFolder.addEventListener("change", () => {
     saveSettings().catch((error) => setError(error.message));
