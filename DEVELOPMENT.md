@@ -466,3 +466,15 @@ For every development item:
 6. Resolve failures before progressing.
 
 Do not mark an item complete based only on UI appearance or an agent statement; verify behaviour from source/tests/runtime evidence.
+
+
+### DEV-017 — Optional microphone in recordings
+**Status:** Implemented; macOS runtime acceptance pending
+
+- Added an opt-in microphone toggle for tab and window/screen capture. Default remains off, including SharePoint and Teams companion recordings.
+- Added `src/shared/audio-mixer.js`: microphone and source audio are mixed via Web Audio into one MediaRecorder input; the saved WebM has one combined audio track.
+- The source stream remains separate for local speaker passthrough to avoid microphone feedback.
+- Microphone and mixer tracks are stopped when recordings end or fail.
+- Source playback, IndexedDB chunk persistence, recovery, and local save format remain unchanged.
+
+**Required runtime acceptance:** On macOS Chrome, grant microphone permission, choose Screen capture, confirm both dropdowns and narration appear in the same WebM; check tab mode, mic denial, mic off and simultaneous recordings. This has not yet been verified on a Mac.
