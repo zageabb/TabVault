@@ -461,6 +461,7 @@ async function startCapture(message) {
     localPlaybackEnabled,
     captureMode,
     canRequestAudioTrack,
+    recordMicrophone: Boolean(message.recordMicrophone),
     meta: {
       title: message.title || "Untitled tab",
       sourceType: message.sourceType || SOURCE_TYPES.GENERIC,
