@@ -419,7 +419,7 @@ Evidence:
 - Remaining validation: record a multi-minute/long video in Chrome and confirm the saved player's seek bar exposes the full duration and can jump forward before playback reaches that point.
 
 ### DEV-018 — Low-load recording quality and Teams coexistence
-**Status:** In progress — Phase 1 implementation
+**Status:** In progress — Phases 1–2 implemented; validation pending
 
 **Problem:** Standard (4 Mbps) and High (8 Mbps) only change the requested encoder bitrate, retaining full source dimensions and frame rate. Multiple concurrent recordings can compete with Teams for CPU/GPU capacity.
 
@@ -436,7 +436,7 @@ Evidence:
 - Each session can use a different quality profile.
 - CI and real Chrome/Teams runtime validation must pass before marking DEV-018 Complete.
 
-**Phase 1 note:** This phase covers tab capture. Persistent display-controller parity, auto-selection, performance measurements and Chrome runtime tests remain explicit pending work.
+**Implementation evidence (2026-10-08):** Added Low CPU and Minimal options in popup, quality-dependent capture constraints for tab video, and actual/requested capture settings in returned recording metadata. Updated the persistent Window / Screen controller to request lower dimensions/FPS via the selected display track's applyConstraints, preserve the picked stream if constraints fail, and report the effective settings. Low-load profiles prefer VP8 before VP9 where supported. Standard and High presets remain unchanged. **Still pending:** automatic selection and Teams-priority mode, user-visible capture constraint warnings, actual FPS/drop monitoring, browser runtime quality verification, performance benchmarks, and full regression testing.
 
 ## Later Ideas
 
