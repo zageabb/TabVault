@@ -614,6 +614,13 @@ function renderCurrentTabState() {
           ? "The selected surface did not provide an audio track."
           : "No tab audio track is currently available.") +
       stateHint;
+    const video = currentRecording.video || {};
+    const actual = [video.width && video.height ? `${video.width}×${video.height}` : null, video.frameRate ? `${video.frameRate} FPS` : null].filter(Boolean).join(" · ");
+    const requested = video.requestedMaxWidth ? ` (target ≤${video.requestedMaxWidth}×${video.requestedMaxHeight}, ≤${video.requestedMaxFrameRate} FPS)` : "";
+    const warning = video.constraintFallback || video.constraintsMet === false
+      ? " Warning: Chrome did not confirm the requested low-load limits." : "";
+    const codec = currentRecording.recorder?.mimeType ? ` Codec: ${currentRecording.recorder.mimeType}.` : "";
+    captureHint.textContent += `${actual ? ` Video: ${actual}${requested}.` : ""}${codec}${warning}`;
   } else {
     captureTitle.textContent = "";
     elapsed.textContent = "00:00:00";
